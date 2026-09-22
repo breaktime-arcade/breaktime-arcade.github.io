@@ -175,10 +175,7 @@ const Snd = {
        adDismissed:()=>done(false), adBreakDone:(i)=>{ if(i.breakStatus!=='viewed') done(false); } }); }
      interstitial(done){ adBreak({type:'next', name:'retry', adBreakDone:()=>done()}); }
    게임 포털 SDK(CrazyGames, Poki 등)도 같은 자리에 연결합니다. */
-const Ads = {
-  rewarded(done){ mockAd('보상형 광고 자리', 3, ()=>done(true)); },
-  interstitial(done){ mockAd('전면 광고 자리', 2, done); }
-};
+const Ads = { rewarded(cb){ cb(true); }, interstitial(cb){ cb && cb(); } };
 function mockAd(label, sec, done){
   const box=$('ad'); $('adLabel').textContent=label; let n=sec; $('adCount').textContent=n; box.classList.remove('hidden');
   const h=setInterval(()=>{ n--; $('adCount').textContent=n; if(n<=0){ clearInterval(h); box.classList.add('hidden'); done(); } },1000);
