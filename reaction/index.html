@@ -1,0 +1,689 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>신호등 반응속도 테스트</title>
+<meta name="description" content="빨간불이 초록불로 바뀌는 순간 누르는 반응속도 테스트. 5번 평균으로 내 반응속도, 칭호, 시속 100km 제동거리를 확인하세요.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Gothic+A1:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --asphalt:#28313A;
+  --asphalt-2:#1E252C;
+  --housing:#161B20;
+  --lamp-off:#343C44;
+  --red:#FF3D2E;
+  --yellow:#FFB400;
+  --green:#12C8A2;
+  --go-flood:#0A7A64;
+  --sign:#0B57A8;
+  --paint:#EEF1F4;
+  --muted:#A3AFBB;
+  --font-display:"Black Han Sans","Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+  --font-body:"Gothic A1","Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  background:var(--asphalt);color:var(--paint);font-family:var(--font-body);
+  -webkit-tap-highlight-color:transparent;touch-action:manipulation;
+  -webkit-text-size-adjust:100%;overflow:hidden;
+}
+button{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--yellow);outline-offset:2px}
+
+/* 신호에 따른 배경 — 전환 애니메이션 없음(자극 시점이 흐려지면 안 됨) */
+body[data-light="red"]{background:radial-gradient(130% 55% at 50% 0%,rgba(255,61,46,.24),transparent 70%),var(--asphalt)}
+body[data-light="yellow"]{background:radial-gradient(130% 55% at 50% 0%,rgba(255,180,0,.22),transparent 70%),var(--asphalt)}
+body[data-light="arrow"]{background:radial-gradient(130% 55% at 50% 0%,rgba(18,200,162,.18),transparent 70%),var(--asphalt)}
+body[data-light="go"]{background:var(--go-flood)}
+body[data-light="alert"]{background:radial-gradient(130% 70% at 50% 40%,rgba(255,180,0,.2),transparent 70%),var(--asphalt)}
+
+.app{height:100%;max-width:480px;margin:0 auto;position:relative}
+.screen{display:none;height:100%;flex-direction:column}
+body[data-screen="start"] #screen-start,
+body[data-screen="play"] #screen-play,
+body[data-screen="result"] #screen-result{display:flex}
+
+/* 신호등 */
+.signal-wrap{padding:16px 18px 0}
+.signal{display:block;width:100%;height:auto;overflow:visible}
+.signal .housing{fill:var(--housing)}
+.signal .visor{fill:#0E1216}
+.signal .bulb{fill:var(--lamp-off)}
+.signal .halo{fill:transparent}
+.signal .lamp-arrow .bulb{fill:#262D34}
+.signal .arrow-shape{fill:#3E4750}
+.signal[data-on="red"] .lamp-red .bulb{fill:var(--red)}
+.signal[data-on="red"] .lamp-red .halo{fill:rgba(255,61,46,.28)}
+.signal[data-on="yellow"] .lamp-yellow .bulb{fill:var(--yellow)}
+.signal[data-on="yellow"] .lamp-yellow .halo{fill:rgba(255,180,0,.28)}
+.signal[data-on="arrow"] .arrow-shape{fill:var(--green)}
+.signal[data-on="arrow"] .lamp-arrow .halo{fill:rgba(18,200,162,.24)}
+.signal[data-on="green"] .lamp-green .bulb{fill:var(--green)}
+.signal[data-on="green"] .lamp-green .halo{fill:rgba(18,200,162,.35)}
+
+.crosswalk{
+  flex:none;height:52px;margin:0 16px 16px;
+  background:repeating-linear-gradient(90deg,rgba(238,241,244,.15) 0 26px,transparent 26px 48px);
+}
+
+/* 시작 화면 */
+.start{overflow-y:auto}
+.start .signal-wrap{width:78%;padding-top:18px}
+.hero{padding:18px 22px 2px}
+.hero h1{font-family:var(--font-display);font-weight:400;font-size:clamp(36px,10.5vw,50px);line-height:1.06;word-break:keep-all}
+.hero p{margin-top:12px;font-size:15px;line-height:1.65;color:var(--muted);word-break:keep-all}
+.modes{display:grid;gap:12px;padding:14px 18px 0}
+.mode-btn{
+  display:block;width:100%;text-align:left;cursor:pointer;
+  background:var(--sign);color:#fff;border:0;border-radius:14px;padding:5px;
+}
+.mode-btn:active{transform:translateY(1px)}
+.mode-inner{
+  display:grid;grid-template-columns:auto 1fr auto;gap:3px 12px;align-items:center;
+  border:2.5px solid #fff;border-radius:10px;padding:11px 14px;
+}
+.mode-icon{grid-row:1 / 3;display:flex;gap:4px}
+.mode-icon i{width:12px;height:12px;border-radius:50%;background:#1B4F86;display:block}
+.mode-name{font-family:var(--font-display);font-size:24px;line-height:1.2}
+.mode-best{font-size:13px;font-weight:700;white-space:nowrap}
+.mode-desc{grid-column:2 / 4;font-size:14px;line-height:1.5;opacity:.88;word-break:keep-all}
+.foot{padding:14px 22px 16px;font-size:12.5px;line-height:1.6;color:var(--muted);word-break:keep-all}
+.start .crosswalk{margin-top:auto}
+
+/* 플레이 화면 */
+.play{
+  touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;
+  cursor:pointer;outline:none;
+}
+.topbar{display:flex;align-items:center;gap:12px;padding:12px 14px 0}
+.icon-btn{
+  width:40px;height:40px;border-radius:50%;flex:none;cursor:pointer;
+  border:2px solid rgba(238,241,244,.35);background:transparent;font-size:17px;line-height:1;
+}
+.mode-tag{font-weight:700;font-size:14px;color:var(--muted)}
+body[data-light="go"] .mode-tag{color:var(--paint)}
+.dots{margin-left:auto;display:flex;gap:7px}
+.dot{width:11px;height:11px;border-radius:50%;border:2px solid rgba(238,241,244,.5)}
+.dot.done{background:var(--paint);border-color:var(--paint)}
+.message{flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:12px;padding:0 24px;text-align:center}
+.main{font-family:var(--font-display);font-size:clamp(34px,10vw,48px);line-height:1.1;word-break:keep-all;font-variant-numeric:tabular-nums}
+.main .unit{font-size:.42em;margin-left:4px}
+.play[data-state="go"] .main{font-size:clamp(76px,25vw,124px)}
+.play[data-state="trial"] .main{font-size:clamp(64px,20vw,100px)}
+.sub{min-height:3.2em;font-size:15px;line-height:1.6;color:var(--muted);white-space:pre-line;word-break:keep-all}
+body[data-light="alert"] .main{color:var(--yellow)}
+
+/* 결과 화면 */
+.result{overflow-y:auto;padding:14px 16px 20px;gap:12px}
+.sign-card{flex:none;background:var(--sign);color:#fff;border-radius:16px;padding:6px}
+.sign-inner{position:relative;border:3px solid #fff;border-radius:11px;padding:14px 16px 16px}
+.r-label{font-size:14px;font-weight:700;opacity:.88}
+.r-avg{font-family:var(--font-display);font-size:clamp(56px,17vw,84px);line-height:1;margin-top:6px;font-variant-numeric:tabular-nums}
+.r-avg .unit{font-size:.4em;margin-left:4px}
+.r-title{font-family:var(--font-display);font-size:26px;margin-top:10px}
+.r-rank{font-size:15px;margin-top:4px;opacity:.92}
+.badge{
+  position:absolute;top:14px;right:14px;border-radius:999px;padding:5px 10px;
+  font-size:12.5px;font-weight:700;background:rgba(255,255,255,.16);
+}
+.badge.new{background:var(--yellow);color:#2B2000;animation:pop .45s ease-out}
+@keyframes pop{0%{transform:scale(.6)}70%{transform:scale(1.12)}100%{transform:scale(1)}}
+.facts{flex:none}
+.fact{
+  display:grid;grid-template-columns:1fr auto;align-items:baseline;gap:4px 12px;
+  padding:10px 4px;border-bottom:2px dashed rgba(238,241,244,.18);
+}
+.fact-k{font-size:14px;color:var(--muted);word-break:keep-all}
+.fact-v{font-family:var(--font-display);font-size:22px;text-align:right;white-space:nowrap}
+.fact-note{grid-column:1 / -1;font-size:14px;line-height:1.5}
+.chips{grid-column:1 / -1;display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
+.chip{font-size:13px;font-weight:700;padding:5px 9px;border-radius:8px;background:rgba(238,241,244,.09);font-variant-numeric:tabular-nums}
+.chip.best{background:var(--green);color:#05261E}
+.actions{flex:none;display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.btn{font-family:var(--font-display);font-size:19px;padding:14px 10px;border-radius:12px;border:0;cursor:pointer}
+.btn:active{transform:translateY(1px)}
+.btn-go{background:var(--green);color:#05261E}
+.btn-line{background:transparent;border:2px solid rgba(238,241,244,.55)}
+.btn-text{
+  grid-column:1 / -1;background:none;border:0;cursor:pointer;padding:6px;
+  font-size:14px;font-weight:700;color:var(--muted);text-decoration:underline;text-underline-offset:3px;
+}
+.more{flex:none}
+.more h2{font-size:14px;font-weight:700;color:var(--muted);margin-bottom:8px}
+.more a{
+  display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:8px;
+  padding:12px 14px;border-radius:12px;background:rgba(238,241,244,.07);color:var(--paint);text-decoration:none;
+}
+.more a b{font-family:var(--font-display);font-weight:400;font-size:18px}
+.more a span{font-size:13px;color:var(--muted);text-align:right;word-break:keep-all}
+.note{flex:none;font-size:12px;line-height:1.6;color:var(--muted);word-break:keep-all}
+
+/* 알림 */
+.toast{
+  position:fixed;left:50%;bottom:24px;transform:translate(-50%,16px);opacity:0;pointer-events:none;
+  max-width:90%;padding:10px 16px;border-radius:10px;text-align:center;
+  background:var(--paint);color:var(--asphalt-2);font-size:14px;font-weight:700;
+  transition:opacity .2s,transform .2s;
+}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+.copybox{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(12,16,20,.72)}
+.copybox[hidden]{display:none}
+.copybox-panel{width:100%;max-width:420px;padding:16px;border-radius:14px;background:var(--asphalt-2)}
+.copybox-panel p{font-size:14px;margin-bottom:10px}
+.copybox textarea{
+  width:100%;height:130px;resize:none;padding:10px;border-radius:10px;border:0;
+  background:var(--asphalt);color:var(--paint);font:14px/1.5 var(--font-body);
+}
+.copybox .btn{width:100%;margin-top:10px}
+
+@media (prefers-reduced-motion:reduce){
+  *{animation:none !important;transition:none !important}
+}
+</style>
+</head>
+<body data-screen="start">
+<main class="app">
+
+  <!-- 시작 -->
+  <section id="screen-start" class="screen start" aria-label="시작 화면">
+    <div class="signal-wrap" data-signal="red"></div>
+    <div class="hero">
+      <h1>신호등<br>반응속도 테스트</h1>
+      <p>빨간불이 초록불로 바뀌는 순간 화면을 누르세요. 다섯 번 재서 평균을 냅니다.</p>
+    </div>
+    <div class="modes">
+      <button class="mode-btn" data-mode="basic">
+        <span class="mode-inner">
+          <span class="mode-icon" aria-hidden="true"><i style="background:var(--red)"></i><i style="background:var(--green)"></i></span>
+          <span class="mode-name">기본 모드</span>
+          <span class="mode-best" data-best="basic">첫 도전</span>
+          <span class="mode-desc">초록불이 켜지면 바로 누르기</span>
+        </span>
+      </button>
+      <button class="mode-btn" data-mode="trap">
+        <span class="mode-inner">
+          <span class="mode-icon" aria-hidden="true"><i style="background:var(--yellow)"></i><i style="background:var(--green)"></i></span>
+          <span class="mode-name">함정 모드</span>
+          <span class="mode-best" data-best="trap">첫 도전</span>
+          <span class="mode-desc">노란불과 좌회전 화살표는 참고, 초록불에만 누르기</span>
+        </span>
+      </button>
+    </div>
+    <p class="foot">기기와 화면에 따라 수십 ms 차이가 날 수 있어요. PC에서는 스페이스바로도 누를 수 있어요.</p>
+    <div class="crosswalk" aria-hidden="true"></div>
+  </section>
+
+  <!-- 플레이 -->
+  <section id="screen-play" class="screen play" tabindex="-1" aria-label="게임 화면">
+    <div class="topbar">
+      <button class="icon-btn" id="btn-exit" aria-label="그만하고 처음으로">✕</button>
+      <span class="mode-tag" id="mode-tag">기본 모드</span>
+      <div class="dots" id="dots" aria-hidden="true"></div>
+    </div>
+    <div class="signal-wrap" data-signal="off" id="play-signal"></div>
+    <div class="message" aria-live="polite">
+      <div class="main" id="msg-main"></div>
+      <div class="sub" id="msg-sub"></div>
+    </div>
+    <div class="crosswalk" aria-hidden="true"></div>
+  </section>
+
+  <!-- 결과 -->
+  <section id="screen-result" class="screen result" aria-label="결과 화면">
+    <div class="sign-card">
+      <div class="sign-inner">
+        <span class="badge" id="r-badge" hidden></span>
+        <p class="r-label" id="r-label">평균 반응속도</p>
+        <p class="r-avg" id="r-avg"></p>
+        <p class="r-title" id="r-title"></p>
+        <p class="r-rank" id="r-rank"></p>
+      </div>
+    </div>
+    <div class="facts">
+      <div class="fact">
+        <span class="fact-k">시속 100km에서 브레이크를 밟기까지</span>
+        <span class="fact-v" id="r-brake"></span>
+        <span class="fact-note" id="r-brake-note"></span>
+      </div>
+      <div class="fact">
+        <span class="fact-k">재미로 보는 반응속도 나이</span>
+        <span class="fact-v" id="r-age"></span>
+      </div>
+      <div class="fact">
+        <span class="fact-k">회차별 기록</span>
+        <span class="fact-v" id="r-best"></span>
+        <div class="chips" id="r-chips"></div>
+        <span class="fact-note" id="r-misc"></span>
+      </div>
+    </div>
+    <div class="actions">
+      <button class="btn btn-go" id="btn-retry">다시 하기</button>
+      <button class="btn btn-line" id="btn-share">결과 공유하기</button>
+      <button class="btn-text" id="btn-home">모드 선택으로</button>
+    </div>
+    <div class="more" id="more" hidden>
+      <h2>다른 게임도 해보세요</h2>
+      <div id="more-list"></div>
+    </div>
+    <p class="note">상위 %는 일반적인 반응속도 분포로 추정한 값이에요. 반응속도 나이는 재미로 보는 결과예요.</p>
+  </section>
+
+</main>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<div class="copybox" id="copybox" hidden>
+  <div class="copybox-panel" role="dialog" aria-label="결과 복사">
+    <p>아래 내용을 길게 눌러 복사하세요.</p>
+    <textarea id="copybox-text" readonly></textarea>
+    <button class="btn btn-go" id="copybox-close">닫기</button>
+  </div>
+</div>
+
+<script>
+/* ===================== 설정 ===================== */
+const CONFIG = {
+  // 이 게임을 올린 블로그 글 주소 (공유 문구에 들어감)
+  shareUrl: 'https://smile-willow.tistory.com/',
+  // 결과 화면 '다른 게임' 링크 — url을 비워두면 표시 안 됨
+  otherGames: [
+    { name: '1초 전의 나', desc: '과거의 나를 피해 살아남기', url: '' },
+    { name: '거짓말 탐지 편의점', desc: '가짜 신분증 골라내기', url: '' },
+  ],
+  trials: 5,              // 한 세트 측정 횟수
+  minValidMs: 100,        // 이보다 빠르면 예측 출발(부정출발)
+  trapChance: 0.4,        // 함정 모드에서 회차별 함정 등장 확률
+  trapShowMs: 800,        // 함정 신호가 켜져 있는 시간
+  stats: { mean: 265, sd: 40, trapShift: 50 }, // 상위 % 추정용 분포(추후 조정)
+  storagePrefix: 'breaktime.reaction.',
+};
+
+const TITLES = [ // [상한 ms, 이모지, 칭호] — 함정 모드는 상한 + trapShift
+  [150, '🏎️', 'F1 드라이버'],
+  [200, '🏁', '레이서'],
+  [240, '🚕', '베테랑 택시기사'],
+  [280, '🚗', '무사고 운전자'],
+  [330, '🚙', '주말 드라이버'],
+  [400, '🔰', '초보운전'],
+  [Infinity, '🐢', '뒤차가 빵빵'],
+];
+const AGES = [[200,'10대'],[240,'20대'],[280,'30대'],[320,'40대'],[370,'50대'],[Infinity,'60대 이상']];
+const MODE_NAME = { basic: '기본 모드', trap: '함정 모드' };
+
+/* ===================== 신호등 SVG ===================== */
+const SIGNAL_SVG = `
+<svg class="signal" viewBox="0 0 320 100" aria-hidden="true">
+  <rect class="housing" x="4" y="10" width="312" height="80" rx="16"/>
+  ${[48,122,198,272].map(cx => `<path class="visor" d="M${cx-30} ${22} Q${cx} ${8} ${cx+30} ${22} Z"/>`).join('')}
+  <g class="lamp lamp-red"><circle class="halo" cx="48" cy="50" r="36"/><circle class="bulb" cx="48" cy="50" r="26"/></g>
+  <g class="lamp lamp-yellow"><circle class="halo" cx="122" cy="50" r="36"/><circle class="bulb" cx="122" cy="50" r="26"/></g>
+  <g class="lamp lamp-arrow"><circle class="halo" cx="198" cy="50" r="36"/><circle class="bulb" cx="198" cy="50" r="26"/>
+    <path class="arrow-shape" d="M214 45 H197 V36 L180 50 L197 64 V55 H214 Z"/></g>
+  <g class="lamp lamp-green"><circle class="halo" cx="272" cy="50" r="36"/><circle class="bulb" cx="272" cy="50" r="26"/></g>
+</svg>`;
+document.querySelectorAll('[data-signal]').forEach(el => {
+  el.innerHTML = SIGNAL_SVG;
+  el.querySelector('svg').dataset.on = el.dataset.signal;
+});
+
+/* ===================== 요소 ===================== */
+const $ = id => document.getElementById(id);
+const playScreen = $('screen-play');
+const playSignal = $('play-signal').querySelector('svg');
+const msgMain = $('msg-main');
+const msgSub = $('msg-sub');
+const dotsEl = $('dots');
+
+/* ===================== 저장소(실패해도 게임은 동작) ===================== */
+const store = {
+  get(k){ try { return localStorage.getItem(CONFIG.storagePrefix + k); } catch(e){ return null; } },
+  set(k, v){ try { localStorage.setItem(CONFIG.storagePrefix + k, String(v)); } catch(e){} },
+};
+function getBest(m){ const v = parseInt(store.get('best.' + m), 10); return Number.isFinite(v) ? v : null; }
+
+/* ===================== 상태 ===================== */
+let mode = 'basic';
+let state = 'ready';     // ready | wait | trap | go | trial | false | trapped | paused | result
+let stateSince = 0;
+let trials = [];
+let falseStarts = 0;
+let trapsHit = 0;
+let trapKind = null;
+let goTime = 0;
+let timers = [];
+let lastShareText = '';
+
+function setState(s){
+  state = s;
+  stateSince = performance.now();
+  playScreen.dataset.state = s;
+}
+function later(fn, ms){ timers.push(setTimeout(fn, ms)); }
+function clearTimers(){ timers.forEach(clearTimeout); timers = []; }
+function showScreen(name){
+  document.body.dataset.screen = name;
+  if (name !== 'play') document.body.dataset.light = '';
+}
+function setLight(light){ // off | red | yellow | arrow | green
+  playSignal.dataset.on = light;
+  document.body.dataset.light = light === 'green' ? 'go' : light;
+}
+function say(main, sub, unit){
+  msgMain.textContent = main;
+  if (unit){
+    const s = document.createElement('span');
+    s.className = 'unit'; s.textContent = unit;
+    msgMain.appendChild(s);
+  }
+  msgSub.textContent = sub || '';
+}
+function renderDots(){
+  dotsEl.innerHTML = '';
+  for (let i = 0; i < CONFIG.trials; i++){
+    const d = document.createElement('span');
+    d.className = 'dot' + (i < trials.length ? ' done' : '');
+    dotsEl.appendChild(d);
+  }
+}
+function vibrate(ms){ try { navigator.vibrate && navigator.vibrate(ms); } catch(e){} }
+
+/* 1.5초 + 지수분포(평균 1.5초), 최대 6초 — 언제 켜질지 예측하기 어렵게 */
+function nextDelay(){
+  const extra = -Math.log(1 - Math.random()) * 1500;
+  return 1500 + Math.min(extra, 4500);
+}
+
+/* ===================== 게임 흐름 ===================== */
+function startGame(m){
+  mode = m;
+  trials = []; falseStarts = 0; trapsHit = 0;
+  $('mode-tag').textContent = MODE_NAME[mode];
+  renderDots();
+  showScreen('play');
+  playScreen.focus({ preventScroll: true });
+  beginWait();
+}
+
+function beginWait(){
+  clearTimers();
+  setState('wait');
+  setLight('red');
+  say('초록불에 누르세요', mode === 'trap' ? '노란불과 좌회전 화살표는 참으세요' : '');
+  if (mode === 'trap' && Math.random() < CONFIG.trapChance){
+    later(showTrap, 800 + Math.random() * 1400);
+  } else {
+    later(showGreen, nextDelay());
+  }
+}
+
+function showTrap(){
+  trapKind = Math.random() < 0.5 ? 'yellow' : 'arrow';
+  setState('trap');
+  setLight(trapKind); // 문구는 바꾸지 않음(글자 변화가 힌트가 되지 않도록)
+  later(() => {
+    setState('wait');
+    setLight('red');
+    later(showGreen, 900 + Math.random() * 1600);
+  }, CONFIG.trapShowMs);
+}
+
+function showGreen(){
+  requestAnimationFrame(() => {
+    setLight('green');
+    say('지금!', '');
+    goTime = performance.now();
+    setState('go');
+  });
+}
+
+function eventTime(e){
+  const now = performance.now();
+  const t = e && e.timeStamp;
+  return (t > 0 && Math.abs(t - now) < 1000) ? t : now;
+}
+
+function onPress(t){
+  switch (state){
+    case 'wait':
+      return falseStart('초록불이 켜지기 전에 눌렀어요.');
+    case 'trap':
+      return trapped();
+    case 'go': {
+      const rt = t - goTime;
+      if (rt < CONFIG.minValidMs) return falseStart('100ms보다 빠른 건 반응이 아니라 예측이에요.');
+      return recordTrial(Math.round(rt));
+    }
+    case 'trial': case 'false': case 'trapped': case 'paused':
+      if (performance.now() - stateSince < 400) return; // 연타로 다음 단계가 넘어가지 않게
+      if (state === 'trial' && trials.length >= CONFIG.trials) return showResult();
+      return beginWait();
+  }
+}
+
+function falseStart(reason){
+  clearTimers();
+  falseStarts++;
+  setState('false');
+  playSignal.dataset.on = 'off';
+  document.body.dataset.light = 'alert';
+  say('부정출발!', reason + '\n화면을 누르면 이번 회차를 다시 해요.');
+  vibrate(120);
+}
+
+function trapped(){
+  clearTimers();
+  trapsHit++;
+  setState('trapped');
+  document.body.dataset.light = 'alert';
+  const why = trapKind === 'yellow' ? '노란불은 출발 신호가 아니에요.' : '좌회전 화살표는 직진 신호가 아니에요.';
+  say('함정에 걸렸어요', why + '\n화면을 누르면 이번 회차를 다시 해요.');
+  vibrate(120);
+}
+
+function comment(ms){
+  if (ms < 180) return '번개 같아요';
+  if (ms < 220) return '아주 빨라요';
+  if (ms < 260) return '좋아요';
+  if (ms < 310) return '무난해요';
+  return '조금 늦었어요';
+}
+
+function recordTrial(ms){
+  clearTimers();
+  trials.push(ms);
+  renderDots();
+  setState('trial');
+  setLight('off');
+  const last = trials.length >= CONFIG.trials;
+  say(String(ms), comment(ms) + '\n' + (last ? '화면을 누르면 결과를 봐요' : '화면을 누르면 다음 신호'), 'ms');
+}
+
+function exitGame(){
+  clearTimers();
+  setState('ready');
+  refreshStart();
+  showScreen('start');
+}
+
+/* ===================== 결과 계산 ===================== */
+function erf(x){
+  const s = Math.sign(x); x = Math.abs(x);
+  const t = 1 / (1 + 0.3275911 * x);
+  const y = 1 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-x * x);
+  return s * y;
+}
+const phi = z => 0.5 * (1 + erf(z / Math.SQRT2));
+const pick = (table, v, shift) => table.find(row => v < row[0] + shift);
+const MPS_100KMH = 100000 / 3600; // 초당 약 27.8m
+
+function computeResult(){
+  const shift = mode === 'trap' ? CONFIG.stats.trapShift : 0;
+  const mean = CONFIG.stats.mean + shift;
+  const avg = Math.round(trials.reduce((a, b) => a + b, 0) / trials.length);
+  const best = Math.min(...trials);
+  const [, emoji, title] = pick(TITLES, avg, shift);
+  const top = Math.min(99, Math.max(1, Math.round(phi((avg - mean) / CONFIG.stats.sd) * 100)));
+  const brake = avg / 1000 * MPS_100KMH;
+  const diff = (mean - avg) / 1000 * MPS_100KMH;
+  const age = pick(AGES, avg, shift)[1];
+  return { avg, best, emoji, title, top, brake, diff, age };
+}
+
+function showResult(){
+  clearTimers();
+  setState('result');
+  const r = computeResult();
+  const prev = getBest(mode);
+  const isNew = prev === null || r.avg < prev;
+  if (isNew) store.set('best.' + mode, r.avg);
+
+  $('r-label').textContent = MODE_NAME[mode] + ' 평균 반응속도';
+  const avgEl = $('r-avg');
+  avgEl.textContent = r.avg;
+  const u = document.createElement('span'); u.className = 'unit'; u.textContent = 'ms';
+  avgEl.appendChild(u);
+  $('r-title').textContent = r.emoji + ' ' + r.title;
+  $('r-rank').textContent = '상위 ' + r.top + '% (추정)';
+
+  const badge = $('r-badge');
+  badge.hidden = false;
+  badge.className = 'badge' + (isNew ? ' new' : '');
+  badge.textContent = isNew ? (prev === null ? '첫 기록' : '최고기록 갱신') : '내 최고 ' + prev + 'ms';
+
+  $('r-brake').textContent = r.brake.toFixed(1) + 'm';
+  $('r-brake-note').textContent = Math.abs(r.diff) < 0.05
+    ? '평균과 거의 같아요'
+    : r.diff > 0
+      ? '평균보다 ' + r.diff.toFixed(1) + 'm 먼저 멈춰요'
+      : '평균보다 ' + Math.abs(r.diff).toFixed(1) + 'm 더 밀려나요';
+  $('r-age').textContent = r.age;
+
+  $('r-best').textContent = '최고 ' + r.best + 'ms';
+  const chips = $('r-chips'); chips.innerHTML = '';
+  let bestMarked = false;
+  trials.forEach(ms => {
+    const c = document.createElement('span');
+    const isBest = !bestMarked && ms === r.best;
+    if (isBest) bestMarked = true;
+    c.className = 'chip' + (isBest ? ' best' : '');
+    c.textContent = ms;
+    chips.appendChild(c);
+  });
+  $('r-misc').textContent = mode === 'trap'
+    ? '부정출발 ' + falseStarts + '회, 함정 걸림 ' + trapsHit + '회'
+    : '부정출발 ' + falseStarts + '회';
+
+  lastShareText =
+    '🚦 신호등 반응속도 테스트' + (mode === 'trap' ? ' (함정 모드)' : '') + '\n' +
+    '내 기록 ' + r.avg + 'ms, ' + r.emoji + ' ' + r.title + ' (상위 ' + r.top + '%)\n' +
+    '시속 100km에서 브레이크까지 ' + r.brake.toFixed(1) + 'm\n' +
+    '👉 너도 해봐: ' + CONFIG.shareUrl;
+
+  showScreen('result');
+  $('screen-result').scrollTop = 0;
+}
+
+/* ===================== 공유 ===================== */
+let toastTimer = null;
+function toast(text){
+  const t = $('toast');
+  t.textContent = text;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2200);
+}
+async function copyText(text){
+  try {
+    if (navigator.clipboard && window.isSecureContext){ await navigator.clipboard.writeText(text); return true; }
+  } catch(e){}
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text; ta.setAttribute('readonly', '');
+    ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    const ok = document.execCommand('copy');
+    ta.remove();
+    return ok;
+  } catch(e){ return false; }
+}
+async function shareResult(){
+  const text = lastShareText;
+  if (navigator.share){
+    try { await navigator.share({ text }); return; }
+    catch(e){ if (e && e.name === 'AbortError') return; }
+  }
+  if (await copyText(text)){ toast('결과를 복사했어요. 원하는 곳에 붙여넣으세요'); return; }
+  $('copybox-text').value = text;
+  $('copybox').hidden = false;
+  $('copybox-text').focus();
+  $('copybox-text').select();
+}
+
+/* ===================== 시작 화면 ===================== */
+function refreshStart(){
+  ['basic', 'trap'].forEach(m => {
+    const b = getBest(m);
+    document.querySelector('[data-best="' + m + '"]').textContent = b === null ? '첫 도전' : '최고 ' + b + 'ms';
+  });
+}
+function renderMore(){
+  const list = CONFIG.otherGames.filter(g => g.url);
+  if (!list.length) return;
+  const box = $('more-list');
+  list.forEach(g => {
+    const a = document.createElement('a');
+    a.href = g.url; a.target = '_top';
+    const b = document.createElement('b'); b.textContent = g.name;
+    const s = document.createElement('span'); s.textContent = g.desc;
+    a.append(b, s);
+    box.appendChild(a);
+  });
+  $('more').hidden = false;
+}
+
+/* ===================== 입력 ===================== */
+document.querySelectorAll('.mode-btn').forEach(btn => {
+  btn.addEventListener('click', () => startGame(btn.dataset.mode));
+});
+playScreen.addEventListener('pointerdown', e => {
+  if (!e.isPrimary) return;
+  if (e.pointerType === 'mouse' && e.button !== 0) return;
+  if (e.target.closest('button')) return;
+  e.preventDefault();
+  onPress(eventTime(e));
+});
+playScreen.addEventListener('contextmenu', e => e.preventDefault());
+document.addEventListener('keydown', e => {
+  if (document.body.dataset.screen !== 'play' || e.repeat) return;
+  if (e.code === 'Space' || e.code === 'Enter' || e.key === ' '){
+    e.preventDefault();
+    onPress(eventTime(e));
+  } else if (e.key === 'Escape'){
+    exitGame();
+  }
+});
+$('btn-exit').addEventListener('pointerdown', e => e.stopPropagation());
+$('btn-exit').addEventListener('click', exitGame);
+$('btn-retry').addEventListener('click', () => startGame(mode));
+$('btn-share').addEventListener('click', shareResult);
+$('btn-home').addEventListener('click', exitGame);
+$('copybox-close').addEventListener('click', () => { $('copybox').hidden = true; });
+
+/* 다른 화면으로 넘어가면 이번 회차 취소(백그라운드 타이머는 부정확) */
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && ['wait', 'trap', 'go'].includes(state)){
+    clearTimers();
+    setState('paused');
+    setLight('off');
+    say('잠시 멈췄어요', '다른 화면으로 넘어가서 이번 회차는 취소됐어요.\n화면을 누르면 다시 해요.');
+  }
+});
+
+refreshStart();
+renderMore();
+</script>
+</body>
+</html>
