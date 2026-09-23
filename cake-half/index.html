@@ -1,0 +1,1191 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>케이크 반 자르기</title>
+<meta name="description" content="케이크를 한 번에 그어 정확히 50:50으로 자르는 눈대중 게임. 10조각 도전과 매일 바뀌는 오늘의 케이크.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Jua&family=Gothic+A1:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --table:#CFEBDD;
+  --cream:#FFF8EC;
+  --ink:#3B2A22;
+  --muted:#86705F;
+  --berry:#E4485A;
+  --berry-deep:#B8303F;
+  --mango:#E09F32;
+  --leaf:#4E9A51;
+  --font-display:"Jua","Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+  --font-body:"Gothic A1","Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  color:var(--ink);font-family:var(--font-body);overflow:hidden;
+  background-color:var(--table);
+  background-image:
+    linear-gradient(90deg,rgba(255,255,255,.42) 50%,transparent 50%),
+    linear-gradient(rgba(255,255,255,.42) 50%,transparent 50%);
+  background-size:32px 32px;
+  -webkit-tap-highlight-color:transparent;touch-action:manipulation;-webkit-text-size-adjust:100%;
+}
+button{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--berry);outline-offset:2px}
+
+.app{height:100%;max-width:480px;margin:0 auto;position:relative}
+.screen{display:none;height:100%;flex-direction:column}
+body[data-screen="start"] #screen-start,
+body[data-screen="play"] #screen-play,
+body[data-screen="result"] #screen-result{display:flex}
+
+/* 공통 버튼 — 두꺼운 테두리와 단단한 그림자로 스티커처럼 */
+.btn{
+  font-family:var(--font-display);font-size:19px;padding:12px 10px;border-radius:14px;cursor:pointer;
+  border:2px solid var(--ink);box-shadow:0 4px 0 var(--ink);
+}
+.btn:active{transform:translateY(3px);box-shadow:0 1px 0 var(--ink)}
+.btn-main{background:var(--berry);color:#fff}
+.btn-sub{background:#fff}
+.btn-text{
+  background:none;border:0;cursor:pointer;padding:6px;font-size:14px;font-weight:700;
+  color:var(--muted);text-decoration:underline;text-underline-offset:3px;
+}
+
+/* 시작 화면 */
+.start{padding:14px;overflow-y:auto}
+.menu{
+  background:var(--cream);border:2px solid var(--ink);border-radius:22px;
+  padding:16px 18px 18px;display:flex;flex-direction:column;gap:14px;
+}
+.hero-art{width:190px;height:auto;display:block;margin:0 auto}
+.menu h1{font-family:var(--font-display);font-weight:400;font-size:clamp(40px,12vw,52px);line-height:1.02;text-align:center}
+.lede{text-align:center;font-size:15px;line-height:1.6;color:var(--muted);word-break:keep-all}
+.modes{display:grid;gap:12px}
+.mode{
+  display:grid;grid-template-columns:1fr auto;align-items:center;gap:2px 10px;width:100%;text-align:left;cursor:pointer;
+  padding:12px 15px;border-radius:14px;background:#fff;border:2px solid var(--ink);box-shadow:0 4px 0 var(--ink);
+}
+.mode:active{transform:translateY(3px);box-shadow:0 1px 0 var(--ink)}
+.mode.daily{background:#FFE6E9}
+.mode-name{font-family:var(--font-display);font-size:23px}
+.mode-status{font-size:13px;font-weight:700;color:var(--berry-deep);white-space:nowrap}
+.mode-desc{grid-column:1 / -1;font-size:13.5px;line-height:1.5;color:var(--muted);word-break:keep-all}
+.start-foot{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.start-foot p{font-size:12.5px;line-height:1.5;color:var(--muted);word-break:keep-all}
+.sound-btn{
+  flex:none;cursor:pointer;font-size:13px;font-weight:700;padding:7px 11px;border-radius:999px;
+  background:#fff;border:2px solid var(--ink);
+}
+
+/* 플레이 화면 */
+.play{user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+.topbar{flex:none;display:flex;align-items:center;gap:8px;padding:10px 12px 0}
+.round-btn{
+  flex:none;width:40px;height:40px;border-radius:50%;cursor:pointer;font-size:16px;line-height:1;
+  background:var(--cream);border:2px solid var(--ink);box-shadow:0 3px 0 var(--ink);
+}
+.round-btn:active{transform:translateY(2px);box-shadow:0 1px 0 var(--ink)}
+.stage-pill{
+  flex:1;min-width:0;display:flex;align-items:center;gap:8px;padding:7px 14px;border-radius:999px;
+  background:var(--cream);border:2px solid var(--ink);font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;
+}
+.stage-pill b{font-family:var(--font-display);font-weight:400;font-size:17px;color:var(--berry-deep)}
+.stage-pill span{overflow:hidden;text-overflow:ellipsis}
+.board-wrap{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;padding:6px 12px}
+#board{display:block;touch-action:none;cursor:crosshair}
+.panel{
+  flex:none;display:grid;gap:8px;padding:12px 16px 14px;
+  background:var(--cream);border-top:2px solid var(--ink);border-radius:20px 20px 0 0;
+}
+.talk{display:flex;align-items:center;gap:12px}
+.kid{flex:none;width:46px;height:46px}
+.kid .ln{fill:none;stroke:var(--ink);stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.bubble{
+  position:relative;flex:1;padding:8px 12px;border-radius:14px;background:#fff;border:2px solid var(--ink);
+  font-size:14.5px;font-weight:700;line-height:1.35;word-break:keep-all;
+}
+.bubble::before{
+  content:"";position:absolute;left:-8px;top:50%;width:12px;height:12px;background:#fff;
+  border-left:2px solid var(--ink);border-bottom:2px solid var(--ink);transform:translateY(-50%) rotate(45deg);
+}
+.readout{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.ratio{font-family:var(--font-display);font-size:clamp(30px,9vw,40px);line-height:1;font-variant-numeric:tabular-nums}
+.ratio.wait{color:#CDBBA8}
+.grade{margin-top:6px;min-height:22px;font-size:13.5px;font-weight:700;color:var(--muted);white-space:nowrap}
+.grade b{font-family:var(--font-display);font-weight:400;font-size:18px;margin-right:6px}
+.grade[data-level="perfect"] b,.grade[data-level="sharp"] b{color:var(--berry-deep)}
+.grade[data-level="great"] b{color:var(--leaf)}
+.grade[data-level="ok"] b{color:var(--mango)}
+.grade[data-level="bad"] b,.grade[data-level="fight"] b{color:#7A4A33}
+#scale{flex:none;width:116px;height:auto}
+.hint{font-size:12.5px;color:var(--muted);text-align:center}
+
+/* 결과 화면 */
+.result{padding:14px;overflow-y:auto}
+.sheet{background:var(--cream);border:2px solid var(--ink);border-radius:22px;padding:18px 16px;display:flex;flex-direction:column;gap:14px}
+.r-head{position:relative}
+.r-label{font-size:14px;font-weight:700;color:var(--muted)}
+.r-emojis{font-size:26px;letter-spacing:2px;margin-top:6px}
+.r-avg{font-family:var(--font-display);font-size:clamp(54px,17vw,76px);line-height:1;margin-top:6px;font-variant-numeric:tabular-nums}
+.r-avg small{font-size:15px;margin-left:8px;color:var(--muted)}
+.r-title{font-family:var(--font-display);font-size:25px;margin-top:10px}
+.r-sub{font-size:14.5px;font-weight:700;margin-top:4px}
+.badge{
+  position:absolute;top:0;right:0;padding:5px 10px;border-radius:999px;font-size:12.5px;font-weight:700;
+  background:#fff;border:2px solid var(--ink);
+}
+.badge.new{background:var(--berry);color:#fff;animation:pop .45s ease-out}
+@keyframes pop{0%{transform:scale(.6)}70%{transform:scale(1.12)}100%{transform:scale(1)}}
+.thumbs{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+.thumb{text-align:center}
+.thumb canvas{display:block;width:100%;aspect-ratio:1}
+.thumb figcaption{margin-top:2px;font-size:12px;font-weight:700;font-variant-numeric:tabular-nums}
+.r-extra{font-size:14px;line-height:1.6;word-break:keep-all}
+.actions{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.actions .btn-text{grid-column:1 / -1}
+.more h2{font-size:14px;font-weight:700;color:var(--muted);margin-bottom:8px}
+.more a{
+  display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:8px;padding:11px 14px;
+  border-radius:14px;background:#fff;border:2px solid var(--ink);color:var(--ink);text-decoration:none;
+}
+.more a b{font-family:var(--font-display);font-weight:400;font-size:18px}
+.more a span{font-size:13px;color:var(--muted);text-align:right;word-break:keep-all}
+.note{font-size:12px;line-height:1.6;color:var(--muted);word-break:keep-all}
+
+/* 알림 */
+.toast{
+  position:fixed;left:50%;bottom:24px;transform:translate(-50%,16px);opacity:0;pointer-events:none;z-index:5;
+  max-width:90%;padding:10px 16px;border-radius:12px;text-align:center;font-size:14px;font-weight:700;
+  background:var(--ink);color:#fff;transition:opacity .2s,transform .2s;
+}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+.copybox{position:fixed;inset:0;z-index:6;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(59,42,34,.55)}
+.copybox[hidden]{display:none}
+.copybox-panel{width:100%;max-width:420px;padding:16px;border-radius:18px;background:var(--cream);border:2px solid var(--ink)}
+.copybox-panel p{font-size:14px;margin-bottom:10px}
+.copybox textarea{
+  width:100%;height:130px;resize:none;padding:10px;border-radius:10px;border:2px solid var(--ink);
+  background:#fff;color:var(--ink);font:14px/1.5 var(--font-body);
+}
+.copybox .btn{width:100%;margin-top:12px}
+
+@media (prefers-reduced-motion:reduce){
+  *{animation:none !important;transition:none !important}
+}
+</style>
+</head>
+<body data-screen="start">
+<main class="app">
+
+  <!-- 시작 -->
+  <section id="screen-start" class="screen start" aria-label="시작 화면">
+    <div class="menu">
+      <svg class="hero-art" viewBox="0 0 200 132" aria-hidden="true">
+        <circle cx="100" cy="70" r="60" fill="#fff" stroke="#3B2A22" stroke-width="2"/>
+        <circle cx="100" cy="68" r="44" fill="#FFF7E8" stroke="#3B2A22" stroke-width="2"/>
+        <circle cx="100" cy="68" r="39" fill="none" stroke="#E6D2B0" stroke-width="5"/>
+        <circle cx="100" cy="68" r="37" fill="none" stroke="#fff" stroke-width="7" stroke-dasharray="0.1 8.6" stroke-linecap="round"/>
+        <path d="M84 52 c6 -1 7 7 0 12 c-7 -5 -6 -13 0 -12z" fill="#E23B4E"/>
+        <path d="M113 58 c6 -1 7 7 0 12 c-7 -5 -6 -13 0 -12z" fill="#E23B4E"/>
+        <path d="M95 76 c6 -1 7 7 0 12 c-7 -5 -6 -13 0 -12z" fill="#E23B4E"/>
+        <line x1="46" y1="118" x2="150" y2="22" stroke="#3B2A22" stroke-width="2.5" stroke-dasharray="7 6" stroke-linecap="round"/>
+        <g transform="translate(160 13) rotate(-42.7)">
+          <path d="M0 0 Q-12 -8 -34 -7 L-34 3 Z" fill="#E4E9EE" stroke="#7E8C97" stroke-width="1.5" stroke-linejoin="round"/>
+          <rect x="-58" y="-5" width="24" height="10" rx="4" fill="#6B4432"/>
+        </g>
+      </svg>
+      <h1>케이크<br>반 자르기</h1>
+      <p class="lede">한 번에 그어서 정확히 50 : 50.<br>동생이 옆에서 지켜보고 있어요.</p>
+      <div class="modes">
+        <button class="mode" data-mode="challenge">
+          <span class="mode-name">10조각 도전</span>
+          <span class="mode-status" id="st-challenge">첫 도전</span>
+          <span class="mode-desc">동그란 케이크부터 곰돌이 케이크까지, 갈수록 어려워져요</span>
+        </button>
+        <button class="mode daily" data-mode="daily">
+          <span class="mode-name" id="daily-name">오늘의 케이크</span>
+          <span class="mode-status" id="st-daily">도전 가능</span>
+          <span class="mode-desc" id="daily-desc">하루 한 번, 모두에게 같은 케이크 5개가 나와요</span>
+        </button>
+      </div>
+      <div class="start-foot">
+        <p>케이크를 가로질러 손가락으로 한 번 그으면 잘려요.</p>
+        <button class="sound-btn" data-sound aria-label="소리 켜고 끄기">🔇 소리 꺼짐</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 플레이 -->
+  <section id="screen-play" class="screen play" aria-label="게임 화면">
+    <div class="topbar">
+      <button class="round-btn" id="btn-exit" aria-label="그만하고 처음으로">✕</button>
+      <div class="stage-pill"><b id="stage-no">1/10</b><span id="stage-name">생크림 케이크</span></div>
+      <button class="round-btn" data-sound aria-label="소리 켜고 끄기">🔇</button>
+    </div>
+    <div class="board-wrap" id="board-wrap">
+      <canvas id="board" aria-label="케이크를 가로질러 드래그해서 자르세요"></canvas>
+    </div>
+    <div class="panel">
+      <div class="talk">
+        <svg class="kid" viewBox="0 0 48 48" aria-hidden="true">
+          <circle cx="24" cy="26" r="17" fill="#FFD9BC" stroke="#3B2A22" stroke-width="2"/>
+          <path d="M7.5 24 C7 12 15 6.5 24 6.5 C33 6.5 41 12 40.5 24 C37 18 31 15.5 25 17.5 C21 14.5 13 16 7.5 24 Z" fill="#4A2F24"/>
+          <circle cx="14" cy="31" r="2.6" fill="#F5A3A3" opacity=".7"/>
+          <circle cx="34" cy="31" r="2.6" fill="#F5A3A3" opacity=".7"/>
+          <g id="face" fill="#3B2A22"></g>
+        </svg>
+        <p class="bubble" id="bubble" aria-live="polite"></p>
+      </div>
+      <div class="readout">
+        <div>
+          <p class="ratio wait" id="ratio" aria-live="polite">? : ?</p>
+          <p class="grade" id="grade"><b id="grade-label"></b><span id="grade-detail"></span></p>
+        </div>
+        <svg id="scale" viewBox="0 0 150 80" aria-hidden="true">
+          <path d="M75 26 L63 72 H87 Z" fill="#C9A98A" stroke="#3B2A22" stroke-width="1.5" stroke-linejoin="round"/>
+          <rect x="54" y="70" width="42" height="7" rx="3.5" fill="#B08D6E" stroke="#3B2A22" stroke-width="1.5"/>
+          <g id="beam"><rect x="21" y="22.5" width="108" height="5" rx="2.5" fill="#8C6A52" stroke="#3B2A22" stroke-width="1.2"/></g>
+          <g id="panL">
+            <path d="M0 0 L-15 20 M0 0 L15 20" stroke="#3B2A22" stroke-width="1.2"/>
+            <circle id="blobL" cx="0" cy="16" r="0"/>
+            <path d="M-20 20 Q0 31 20 20 Z" fill="#EFE3D3" stroke="#3B2A22" stroke-width="1.5" stroke-linejoin="round"/>
+          </g>
+          <g id="panR">
+            <path d="M0 0 L-15 20 M0 0 L15 20" stroke="#3B2A22" stroke-width="1.2"/>
+            <circle id="blobR" cx="0" cy="16" r="0"/>
+            <path d="M-20 20 Q0 31 20 20 Z" fill="#EFE3D3" stroke="#3B2A22" stroke-width="1.5" stroke-linejoin="round"/>
+          </g>
+          <circle cx="75" cy="25" r="4" fill="#6B4E3B"/>
+        </svg>
+      </div>
+      <p class="hint" id="hint"></p>
+    </div>
+  </section>
+
+  <!-- 결과 -->
+  <section id="screen-result" class="screen result" aria-label="결과 화면">
+    <div class="sheet">
+      <div class="r-head">
+        <span class="badge" id="r-badge" hidden></span>
+        <p class="r-label" id="r-label"></p>
+        <p class="r-emojis" id="r-emojis" hidden></p>
+        <p class="r-avg"><span id="r-avg"></span><small>평균 오차</small></p>
+        <p class="r-title" id="r-title"></p>
+        <p class="r-sub" id="r-sub"></p>
+      </div>
+      <div class="thumbs" id="r-thumbs"></div>
+      <p class="r-extra" id="r-extra"></p>
+      <div class="actions">
+        <button class="btn btn-main" id="btn-a"></button>
+        <button class="btn btn-sub" id="btn-b"></button>
+        <button class="btn-text" id="btn-home">모드 선택으로</button>
+      </div>
+      <div class="more" id="more" hidden>
+        <h2>다른 게임도 해보세요</h2>
+        <div id="more-list"></div>
+      </div>
+      <p class="note">넓이는 화면에 그려진 케이크 모양 그대로 계산해요. 장식은 넓이에 들어가지 않아요.</p>
+    </div>
+  </section>
+
+</main>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<div class="copybox" id="copybox" hidden>
+  <div class="copybox-panel" role="dialog" aria-label="결과 복사">
+    <p>아래 내용을 길게 눌러 복사하세요.</p>
+    <textarea id="copybox-text" readonly></textarea>
+    <button class="btn btn-main" id="copybox-close">닫기</button>
+  </div>
+</div>
+
+<script>
+/* ===================== 설정 ===================== */
+const CONFIG = {
+  // 이 게임을 올린 블로그 글 주소 (공유 문구에 들어감)
+  shareUrl: 'https://smile-willow.tistory.com/',
+  // 결과 화면 '다른 게임' 링크 — url을 비워두면 표시 안 됨
+  otherGames: [
+    { name: '신호등 반응속도', desc: '초록불에 누르는 반응속도 테스트', url: '' },
+    { name: '1초 전의 나', desc: '과거의 나를 피해 살아남기', url: '' },
+  ],
+  dailyStart: '2026-09-23',   // '오늘의 케이크 #1'이 되는 날짜 (게임 공개일로 바꾸세요)
+  dailyCount: 5,
+  storagePrefix: 'breaktime.cake.',
+};
+
+const STAGES = [
+  { kind: 'circle',   flavor: 'cream',      name: '생크림 케이크' },
+  { kind: 'rect',     flavor: 'castella',   name: '카스텔라' },
+  { kind: 'triangle', flavor: 'cheese',     name: '치즈 조각 케이크' },
+  { kind: 'heart',    flavor: 'strawberry', name: '딸기 하트 케이크' },
+  { kind: 'bitten',   flavor: 'tiramisu',   name: '한 입 먹은 티라미수' },
+  { kind: 'halfmoon', flavor: 'matcha',     name: '말차 반달 케이크' },
+  { kind: 'star',     flavor: 'blueberry',  name: '블루베리 별 케이크' },
+  { kind: 'bear',     flavor: 'choco',      name: '초코 곰돌이 케이크' },
+  { kind: 'lshape',   flavor: 'mango',      name: '망고 L자 케이크' },
+  { kind: 'blob',     flavor: 'strawberry', name: '딸기 구름 케이크' },
+];
+
+const FLAVORS = {
+  cream:      { label: '생크림',   top: '#FFF7E8', edge: '#E6D2B0', dots: '#FFFFFF', topping: 'strawberry' },
+  castella:   { label: '카스텔라', top: '#C97A34', edge: '#8E4E1C', dots: null,      topping: null, specks: '#DB9A55' },
+  cheese:     { label: '치즈',     top: '#F8DF95', edge: '#D8B45A', dots: '#FCEBB9', topping: 'blueberry' },
+  strawberry: { label: '딸기',     top: '#F9BFCA', edge: '#DB8C9C', dots: '#FDE0E5', topping: 'strawberry' },
+  tiramisu:   { label: '티라미수', top: '#A87555', edge: '#6E432B', dots: null,      topping: null, specks: '#7A4C33' },
+  matcha:     { label: '말차',     top: '#AFCF8E', edge: '#7FA462', dots: '#D3E6BD', topping: 'cherry' },
+  blueberry:  { label: '블루베리', top: '#C3BBEA', edge: '#8F86C8', dots: '#E2DEF8', topping: 'blueberry' },
+  choco:      { label: '초코',     top: '#7B4A33', edge: '#4A2A1A', dots: '#97654B', topping: 'cherry' },
+  mango:      { label: '망고',     top: '#FFCB5C', edge: '#DE9E30', dots: '#FFE4A6', topping: 'strawberry' },
+};
+const KIND_NOUN = {
+  rect: '네모 케이크', triangle: '조각 케이크', heart: '하트 케이크', bitten: '한 입 먹은 케이크',
+  halfmoon: '반달 케이크', star: '별 케이크', bear: '곰돌이 케이크', lshape: 'L자 케이크', blob: '구름 케이크',
+};
+
+const GRADES = [ // 판정 — 첫 줄은 50.0 : 50.0
+  { level: 'perfect', label: '완벽한 반반!', mood: 'happy', lines: ['…인정. 똑같네.', '와, 저울도 못 가르겠다.'] },
+  { level: 'sharp', max: 0.5, label: '칼같아요', mood: 'happy', lines: ['이 정도면 봐준다.', '오, 거의 똑같은데?'] },
+  { level: 'great', max: 1.5, label: '훌륭해요', mood: 'smile', lines: ['음… 괜찮네.', '뭐, 이 정도는 참을게.'] },
+  { level: 'ok', max: 3, label: '괜찮아요', mood: 'suspicious', lines: ['내 쪽이 좀 작은 것 같은데?', '잠깐, 다시 봐봐.'] },
+  { level: 'bad', max: 6, label: '아쉬워요', mood: 'angry', lines: ['야, 이거 불공평해!', '딱 봐도 차이 나잖아!'] },
+  { level: 'fight', max: Infinity, label: '싸움 발생', mood: 'cry', lines: ['엄마!!!', '나 안 먹어!!'] },
+];
+const IDLE_LINES = ['정확히 반이야. 지켜본다.', '내가 먼저 고를 거야.', '한 번에 잘라야 돼!', '눈 크게 뜨고 본다?', '공평하게 부탁해.'];
+const TITLES = [ // [평균 오차 상한, 이모지, 칭호]
+  [0.8, '👑', '반반 공정거래위원장'],
+  [1.5, '🏅', '제과 명장'],
+  [2.5, '🎂', '수석 파티시에'],
+  [4, '🥐', '동네 빵집 사장님'],
+  [6, '🧁', '케이크 알바생'],
+  [10, '🍴', '눈대중 초보'],
+  [Infinity, '😤', '형제 싸움 유발자'],
+];
+const FACES = {
+  idle: '<circle cx="18" cy="26" r="2.3"/><circle cx="30" cy="26" r="2.3"/><path class="ln" d="M20 33.5 Q24 36 28 33.5"/>',
+  happy: '<path class="ln" d="M15.5 26.5 Q18 23 20.5 26.5 M27.5 26.5 Q30 23 32.5 26.5"/><path d="M18 31.5 Q24 39 30 31.5 Z" fill="#8C3B2F"/>',
+  smile: '<circle cx="18" cy="26" r="2.3"/><circle cx="30" cy="26" r="2.3"/><path class="ln" d="M19 32.5 Q24 37 29 32.5"/>',
+  suspicious: '<path class="ln" d="M15.5 26 H20.5 M27.5 26 H32.5 M15 21.5 L21 22.5 M27 20 L33 18.5 M20.5 34 H27.5"/>',
+  angry: '<circle cx="18" cy="26.5" r="2.3"/><circle cx="30" cy="26.5" r="2.3"/><path class="ln" d="M14.5 20.5 L21 23.5 M33.5 20.5 L27 23.5 M19 35.5 Q24 31 29 35.5"/>',
+  cry: '<path class="ln" d="M15.5 25 Q18 27.5 20.5 25 M27.5 25 Q30 27.5 32.5 25"/><path d="M17 28 q-2 4 0 5 q2 -1 0 -5 Z M31 28 q-2 4 0 5 q2 -1 0 -5 Z" fill="#6FB6E8"/><path d="M19 37 Q24 29 29 37 Z" fill="#8C3B2F"/>',
+};
+
+/* ===================== 수학 도우미 ===================== */
+const TAU = Math.PI * 2;
+const clamp = (v, lo = 0, hi = 1) => Math.max(lo, Math.min(hi, v));
+const rand = (rng, lo, hi) => lo + (hi - lo) * rng();
+const unit = (a, b) => { const dx = b.x - a.x, dy = b.y - a.y, l = Math.hypot(dx, dy) || 1; return { x: dx / l, y: dy / l }; };
+const round2 = p => ({ x: Math.round(p.x * 100) / 100, y: Math.round(p.y * 100) / 100 });
+
+function polyArea(p){
+  let s = 0;
+  for (let i = 0; i < p.length; i++){ const q = p[(i + 1) % p.length]; s += p[i].x * q.y - q.x * p[i].y; }
+  return s / 2;
+}
+function side(p, a, b){ return (b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x); }
+/* 직선 a→b의 한쪽(side ≥ 0)만 남기고 다각형을 자름 — 오목한 모양에도 넓이는 정확 */
+function clipHalf(poly, a, b){
+  const out = [];
+  for (let i = 0; i < poly.length; i++){
+    const P = poly[i], Q = poly[(i + 1) % poly.length];
+    const sp = side(P, a, b), sq = side(Q, a, b);
+    if (sp >= 0) out.push(P);
+    if ((sp >= 0) !== (sq >= 0)){
+      const t = sp / (sp - sq);
+      out.push({ x: P.x + t * (Q.x - P.x), y: P.y + t * (Q.y - P.y) });
+    }
+  }
+  return out;
+}
+function centroid(p){
+  let A = 0, cx = 0, cy = 0;
+  for (let i = 0; i < p.length; i++){
+    const q = p[(i + 1) % p.length], cr = p[i].x * q.y - q.x * p[i].y;
+    A += cr; cx += (p[i].x + q.x) * cr; cy += (p[i].y + q.y) * cr;
+  }
+  if (Math.abs(A) < 1e-9) return p[0] || { x: 200, y: 200 };
+  return { x: cx / (3 * A), y: cy / (3 * A) };
+}
+function pointInPoly(pt, poly){
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++){
+    const a = poly[i], b = poly[j];
+    if ((a.y > pt.y) !== (b.y > pt.y) && pt.x < (b.x - a.x) * (pt.y - a.y) / (b.y - a.y) + a.x) inside = !inside;
+  }
+  return inside;
+}
+function distToEdge(pt, poly){
+  let m = Infinity;
+  for (let i = 0; i < poly.length; i++){
+    const a = poly[i], b = poly[(i + 1) % poly.length], dx = b.x - a.x, dy = b.y - a.y, L = dx * dx + dy * dy;
+    const t = L ? clamp(((pt.x - a.x) * dx + (pt.y - a.y) * dy) / L) : 0;
+    const x = a.x + t * dx - pt.x, y = a.y + t * dy - pt.y;
+    m = Math.min(m, x * x + y * y);
+  }
+  return Math.sqrt(m);
+}
+function mulberry32(a){
+  return function(){
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+function hashStr(s){
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++){ h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return h >>> 0;
+}
+
+/* ===================== 케이크 모양 ===================== */
+function ring(r, n){
+  const pts = [];
+  for (let i = 0; i < n; i++){ const t = TAU * i / n; pts.push({ x: r * Math.cos(t), y: r * Math.sin(t) }); }
+  return pts;
+}
+const SHAPES = {
+  circle(){ return { poly: ring(115, 240) }; },
+  rect(rng){
+    const w = rand(rng, 215, 240), h = rand(rng, 120, 145), rc = 12, hw = w / 2 - rc, hh = h / 2 - rc, pts = [];
+    [[hw, hh, 0], [-hw, hh, 0.5], [-hw, -hh, 1], [hw, -hh, 1.5]].forEach(([cx, cy, a]) => {
+      for (let i = 0; i <= 10; i++){ const t = Math.PI * (a + 0.5 * i / 10); pts.push({ x: cx + rc * Math.cos(t), y: cy + rc * Math.sin(t) }); }
+    });
+    return { poly: pts };
+  },
+  triangle(rng){
+    const base = rand(rng, 0, TAU), g1 = rand(rng, 1.75, 2.45), g2 = rand(rng, 1.75, 2.45);
+    return { poly: [base, base + g1, base + g1 + g2].map(t => { const r = rand(rng, 120, 140); return { x: r * Math.cos(t), y: r * Math.sin(t) }; }) };
+  },
+  heart(rng){
+    const s = rand(rng, 6.8, 7.4), pts = [];
+    for (let i = 0; i < 240; i++){
+      const t = TAU * i / 240;
+      pts.push({ x: s * 16 * Math.sin(t) ** 3, y: -s * (13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t)) });
+    }
+    return { poly: pts };
+  },
+  bitten(rng){
+    const R = 115, rb = rand(rng, 40, 50), d = R + rand(rng, 0, 12);
+    const x = (d * d + R * R - rb * rb) / (2 * d), y = Math.sqrt(R * R - x * x), al = Math.atan2(y, x), pts = [];
+    for (let i = 0; i <= 220; i++){ const t = al + (TAU - 2 * al) * i / 220; pts.push({ x: R * Math.cos(t), y: R * Math.sin(t) }); }
+    const b1 = Math.atan2(-y, x - d), b2 = Math.atan2(y, x - d) - TAU;
+    for (let i = 1; i < 40; i++){
+      const t = b1 + (b2 - b1) * i / 40, w = 1 + 0.035 * Math.sin(t * 14);
+      pts.push({ x: d + rb * w * Math.cos(t), y: rb * w * Math.sin(t) });
+    }
+    return { poly: pts };
+  },
+  halfmoon(rng){
+    const R = rand(rng, 135, 145), pts = [];
+    for (let i = 0; i <= 180; i++){ const t = Math.PI + Math.PI * i / 180; pts.push({ x: R * Math.cos(t), y: R * Math.sin(t) }); }
+    for (let i = 1; i < 8; i++) pts.push({ x: R - 2 * R * i / 8, y: 0 });
+    return { poly: pts };
+  },
+  star(rng){
+    const R = rand(rng, 128, 138), r = R * rand(rng, 0.46, 0.52), pts = [];
+    for (let i = 0; i < 10; i++){ const rr = i % 2 ? r : R, t = -Math.PI / 2 + Math.PI * i / 5; pts.push({ x: rr * Math.cos(t), y: rr * Math.sin(t) }); }
+    return { poly: pts };
+  },
+  bear(rng){
+    const R = 100, er = rand(rng, 34, 40), ea = rand(rng, 0.62, 0.78);
+    const ears = [{ x: 100 * Math.sin(ea), y: -100 * Math.cos(ea) }, { x: -100 * Math.sin(ea), y: -100 * Math.cos(ea) }];
+    const pts = [];
+    for (let i = 0; i < 360; i++){
+      const t = TAU * i / 360, ux = Math.cos(t), uy = Math.sin(t);
+      let r = R;
+      ears.forEach(c => {
+        const b = ux * c.x + uy * c.y, disc = er * er - (c.x * c.x + c.y * c.y - b * b);
+        if (disc >= 0 && b > 0) r = Math.max(r, b + Math.sqrt(disc));
+      });
+      pts.push({ x: r * ux, y: r * uy });
+    }
+    const decor = ears.map(c => ({ type: 'earIn', x: c.x * 1.12, y: c.y * 1.12, r: er * 0.48 }));
+    decor.push({ type: 'snout', x: 0, y: 30, r: 30 }, { type: 'eye', x: -34, y: -12, r: 6.5 },
+               { type: 'eye', x: 34, y: -12, r: 6.5 }, { type: 'nose', x: 0, y: 20, r: 7 });
+    return { poly: pts, decor };
+  },
+  lshape(rng){
+    const a = rand(rng, 95, 115), b = rand(rng, 220, 245), c = rand(rng, 95, 115), d = rand(rng, 200, 235);
+    let pts = [{ x: 0, y: 0 }, { x: a, y: 0 }, { x: a, y: b - c }, { x: d, y: b - c }, { x: d, y: b }, { x: 0, y: b }];
+    if (rng() < 0.5) pts = pts.map(p => ({ x: -p.x, y: p.y }));
+    return { poly: pts };
+  },
+  blob(rng){
+    const base = rand(rng, 100, 112);
+    const waves = [2, 3, 4, 5].map(k => ({ k, a: rand(rng, 4, k === 2 ? 20 : 12), p: rand(rng, 0, TAU) }));
+    const pts = [];
+    for (let i = 0; i < 300; i++){
+      const t = TAU * i / 300;
+      const r = waves.reduce((s, w) => s + w.a * Math.sin(w.k * t + w.p), base);
+      pts.push({ x: r * Math.cos(t), y: r * Math.sin(t) });
+    }
+    return { poly: pts };
+  },
+};
+const ROT_LIMIT = { heart: 0.6, bear: 0.45 }; // 알아보기 쉽게 이 둘만 회전 제한
+
+function placeShape(shape, rng, kind){
+  const lim = ROT_LIMIT[kind];
+  const rot = lim != null ? rand(rng, -lim, lim) : rand(rng, 0, TAU);
+  const c = Math.cos(rot), s = Math.sin(rot);
+  const tf = p => ({ x: p.x * c - p.y * s, y: p.x * s + p.y * c });
+  let poly = shape.poly.map(tf);
+  let decor = (shape.decor || []).map(d => Object.assign({}, d, tf(d)));
+  const xs = poly.map(p => p.x), ys = poly.map(p => p.y);
+  const cx = (Math.min(...xs) + Math.max(...xs)) / 2, cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+  const far = Math.max(...poly.map(p => Math.hypot(p.x - cx, p.y - cy)));
+  const k = rand(rng, 150, 162) / far; // 모양과 상관없이 접시에 비슷한 크기로
+  const fin = p => ({ x: 200 + (p.x - cx) * k, y: 200 + (p.y - cy) * k });
+  poly = poly.map(fin);
+  decor = decor.map(d => Object.assign({}, d, fin(d), { r: d.r * k }));
+  return { poly, decor, area: Math.abs(polyArea(poly)) };
+}
+function scatter(poly, rng, count, minEdge, minGap){
+  const xs = poly.map(p => p.x), ys = poly.map(p => p.y);
+  const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys), pts = [];
+  for (let t = 0; t < count * 60 && pts.length < count; t++){
+    const p = { x: rand(rng, x0, x1), y: rand(rng, y0, y1) };
+    if (!pointInPoly(p, poly)) continue;
+    if (minEdge && distToEdge(p, poly) < minEdge) continue;
+    if (minGap && pts.some(q => Math.hypot(q.x - p.x, q.y - p.y) < minGap)) continue;
+    p.rot = rand(rng, -0.6, 0.6);
+    pts.push(p);
+  }
+  return pts;
+}
+function buildCake(kind, flavorKey, name, rng){
+  const shape = SHAPES[kind](rng);
+  const cake = placeShape(shape, rng, kind);
+  const flavor = FLAVORS[flavorKey];
+  cake.kind = kind; cake.name = name; cake.flavor = flavor;
+  const n = Math.round(clamp(cake.area / 9000, 3, 7));
+  cake.toppings = (!shape.decor && flavor.topping) ? scatter(cake.poly, rng, n, 24, 34) : [];
+  cake.specks = flavor.specks ? scatter(cake.poly, rng, 140, 0, 0) : [];
+  return cake;
+}
+
+/* ===================== 날짜와 오늘의 케이크 ===================== */
+const pad = n => String(n).padStart(2, '0');
+const dateKey = d => d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+const todayKey = () => dateKey(new Date());
+const yesterdayKey = () => { const d = new Date(); return dateKey(new Date(d.getFullYear(), d.getMonth(), d.getDate() - 1)); };
+function dayNumber(key){
+  const [y, m, d] = key.split('-').map(Number), [sy, sm, sd] = CONFIG.dailyStart.split('-').map(Number);
+  return Math.max(1, Math.round((Date.UTC(y, m - 1, d) - Date.UTC(sy, sm - 1, sd)) / 86400000) + 1);
+}
+function dailyCakes(key){
+  const rng = mulberry32(hashStr('cake-' + key));
+  const pool = ['rect', 'triangle', 'heart', 'bitten', 'halfmoon', 'star', 'bear', 'lshape'];
+  for (let i = pool.length - 1; i > 0; i--){ const j = Math.floor(rng() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
+  const kinds = pool.slice(0, CONFIG.dailyCount - 1).concat('blob');
+  const flavors = ['cream', 'cheese', 'strawberry', 'matcha', 'blueberry', 'choco', 'mango', 'tiramisu'];
+  return kinds.map(kind => {
+    const fl = kind === 'bear' ? 'choco' : flavors[Math.floor(rng() * flavors.length)];
+    return buildCake(kind, fl, FLAVORS[fl].label + ' ' + KIND_NOUN[kind], rng);
+  });
+}
+
+/* ===================== 저장소(실패해도 게임은 동작) ===================== */
+const store = {
+  get(k){ try { return localStorage.getItem(CONFIG.storagePrefix + k); } catch(e){ return null; } },
+  set(k, v){ try { localStorage.setItem(CONFIG.storagePrefix + k, String(v)); } catch(e){} },
+  getJSON(k){ try { return JSON.parse(this.get(k)); } catch(e){ return null; } },
+  setJSON(k, v){ this.set(k, JSON.stringify(v)); },
+};
+
+/* ===================== 소리(기본 꺼짐) ===================== */
+const Sound = {
+  on: store.get('sound') === '1', ac: null,
+  ctx(){
+    if (!this.ac){ const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return null; this.ac = new AC(); }
+    if (this.ac.state === 'suspended') this.ac.resume();
+    return this.ac;
+  },
+  cut(){
+    if (!this.on) return; const ac = this.ctx(); if (!ac) return;
+    const dur = 0.22, buf = ac.createBuffer(1, Math.floor(ac.sampleRate * dur), ac.sampleRate), d = buf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / d.length);
+    const src = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain();
+    src.buffer = buf; f.type = 'bandpass'; f.Q.value = 1.2;
+    f.frequency.setValueAtTime(1800, ac.currentTime); f.frequency.linearRampToValueAtTime(3800, ac.currentTime + dur);
+    g.gain.value = 0.35;
+    src.connect(f).connect(g).connect(ac.destination); src.start();
+  },
+  notes(freqs, type = 'sine', gap = 0.09, len = 0.18, vol = 0.16){
+    const ac = this.ctx(); if (!ac) return;
+    freqs.forEach((fq, i) => {
+      const o = ac.createOscillator(), g = ac.createGain(), t = ac.currentTime + i * gap;
+      o.type = type; o.frequency.value = fq;
+      g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + 0.01); g.gain.exponentialRampToValueAtTime(0.001, t + len);
+      o.connect(g).connect(ac.destination); o.start(t); o.stop(t + len + 0.02);
+    });
+  },
+  result(level){
+    if (!this.on) return;
+    if (level === 'perfect') this.notes([784, 988, 1175, 1568]);
+    else if (level === 'sharp' || level === 'great') this.notes([659, 880]);
+    else if (level === 'ok') this.notes([523]);
+    else this.notes([220, 185], 'triangle', 0.14, 0.22, 0.2);
+  },
+};
+function refreshSoundButtons(){
+  document.querySelectorAll('[data-sound]').forEach(b => {
+    b.textContent = b.classList.contains('round-btn') ? (Sound.on ? '🔊' : '🔇') : (Sound.on ? '🔊 소리 켜짐' : '🔇 소리 꺼짐');
+    b.setAttribute('aria-pressed', Sound.on ? 'true' : 'false');
+  });
+}
+
+/* ===================== 요소와 상태 ===================== */
+const $ = id => document.getElementById(id);
+const canvas = $('board'), ctx = canvas.getContext('2d');
+const layer = document.createElement('canvas'), lctx = layer.getContext('2d');
+const reduceMotion = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+const INK = '#3B2A22', SPONGE = '#F2CB86', SEP = 7;
+const view = { k: 1 };
+
+let run = null;     // 진행 중인 판
+let cake = null;    // 현재 케이크
+let phase = 'idle'; // idle | aim | drag | cutting | reveal
+let drag = null;
+let cut = null;
+let confetti = [];
+let rafId = 0;
+let countdownTimer = 0;
+
+/* ===================== 그리기 ===================== */
+function tracePoly(c, poly){
+  c.beginPath(); c.moveTo(poly[0].x, poly[0].y);
+  for (let i = 1; i < poly.length; i++) c.lineTo(poly[i].x, poly[i].y);
+  c.closePath();
+}
+function dot(c, x, y, r){ c.beginPath(); c.arc(x, y, r, 0, TAU); c.fill(); }
+function line(c, p, q){ c.beginPath(); c.moveTo(p.x, p.y); c.lineTo(q.x, q.y); c.stroke(); }
+function roundRectPath(c, x, y, w, h, r){
+  c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r);
+  c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath();
+}
+const TOPPING_DRAW = {
+  strawberry(c, t){
+    c.save(); c.translate(t.x, t.y); c.rotate(t.rot);
+    c.fillStyle = 'rgba(59,42,34,.18)'; c.beginPath(); c.ellipse(1.5, 3, 10, 11, 0, 0, TAU); c.fill();
+    c.fillStyle = '#E23B4E'; c.beginPath(); c.moveTo(0, -9);
+    c.bezierCurveTo(10, -10, 11, 3, 0, 12); c.bezierCurveTo(-11, 3, -10, -10, 0, -9); c.fill();
+    c.fillStyle = '#FFE39A'; [[-3, -2], [3, -1], [0, 4], [-4, 4], [4, 5]].forEach(([x, y]) => dot(c, x, y, 0.9));
+    c.fillStyle = '#4E9A51';
+    for (let k = 0; k < 4; k++){ c.save(); c.translate(0, -9); c.rotate(-1.2 + k * 0.8); c.beginPath(); c.ellipse(0, -4, 2.2, 5, 0, 0, TAU); c.fill(); c.restore(); }
+    c.restore();
+  },
+  blueberry(c, t){
+    c.save(); c.translate(t.x, t.y); c.rotate(t.rot);
+    [[-5, 2], [5, 2], [0, -6]].forEach(([x, y]) => {
+      c.fillStyle = 'rgba(59,42,34,.18)'; dot(c, x + 1, y + 2, 6);
+      c.fillStyle = '#3E3F8E'; dot(c, x, y, 6);
+      c.fillStyle = 'rgba(255,255,255,.45)'; dot(c, x - 2, y - 2, 1.6);
+    });
+    c.restore();
+  },
+  cherry(c, t){
+    c.save(); c.translate(t.x, t.y); c.rotate(t.rot);
+    c.strokeStyle = '#4E7A3A'; c.lineWidth = 2; c.beginPath(); c.moveTo(0, -5); c.quadraticCurveTo(2, -15, 9, -19); c.stroke();
+    c.fillStyle = 'rgba(59,42,34,.2)'; dot(c, 1.5, 2.5, 9);
+    c.fillStyle = '#C7162E'; dot(c, 0, 0, 9);
+    c.fillStyle = 'rgba(255,255,255,.5)'; dot(c, -3, -3, 2.2);
+    c.restore();
+  },
+};
+function drawDecor(c, d){
+  if (d.type === 'earIn'){ c.fillStyle = 'rgba(0,0,0,.2)'; dot(c, d.x, d.y, d.r); }
+  else if (d.type === 'snout'){ c.fillStyle = '#A9785C'; dot(c, d.x, d.y, d.r); }
+  else if (d.type === 'eye'){ c.fillStyle = '#24140D'; dot(c, d.x, d.y, d.r); c.fillStyle = 'rgba(255,255,255,.85)'; dot(c, d.x - d.r * 0.3, d.y - d.r * 0.3, d.r * 0.32); }
+  else if (d.type === 'nose'){ c.fillStyle = '#24140D'; dot(c, d.x, d.y, d.r); }
+}
+
+/* 케이크(장식 포함)는 따로 한 장 그려두고, 자를 때 반평면으로 잘라 옮김 */
+function renderLayer(){
+  const c = lctx, f = cake.flavor;
+  c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, layer.width, layer.height);
+  c.setTransform(view.k, 0, 0, view.k, 0, 0);
+  c.lineJoin = 'round'; c.lineCap = 'round';
+  c.save(); c.translate(0, 6); tracePoly(c, cake.poly); c.fillStyle = 'rgba(59,42,34,.16)'; c.fill(); c.restore();
+  tracePoly(c, cake.poly); c.fillStyle = f.top; c.fill();
+  c.save(); tracePoly(c, cake.poly); c.clip();
+  if (f.specks){ c.fillStyle = f.specks; cake.specks.forEach(s => dot(c, s.x, s.y, 1.2 + (s.rot + 0.6) * 0.9)); }
+  if (f.dots){
+    c.setLineDash([0.1, 21]); c.lineWidth = 24;
+    c.save(); c.translate(0, 1.5); c.strokeStyle = 'rgba(59,42,34,.14)'; tracePoly(c, cake.poly); c.stroke(); c.restore();
+    c.strokeStyle = f.dots; tracePoly(c, cake.poly); c.stroke(); c.setLineDash([]);
+  }
+  c.lineWidth = 8; c.strokeStyle = f.edge; tracePoly(c, cake.poly); c.stroke();
+  c.restore();
+  c.lineWidth = 2; c.strokeStyle = 'rgba(59,42,34,.4)'; tracePoly(c, cake.poly); c.stroke();
+  cake.toppings.forEach(t => TOPPING_DRAW[f.topping](c, t));
+  cake.decor.forEach(d => drawDecor(c, d));
+}
+function drawPlate(){
+  ctx.fillStyle = 'rgba(59,42,34,.14)'; dot(ctx, 200, 207, 186);
+  ctx.fillStyle = '#FFFFFF'; dot(ctx, 200, 200, 186);
+  ctx.strokeStyle = INK; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(200, 200, 186, 0, TAU); ctx.stroke();
+  ctx.strokeStyle = '#EAE3D9'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(200, 200, 168, 0, TAU); ctx.stroke();
+}
+function drawKnife(p, ang){
+  ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(ang);
+  ctx.lineJoin = 'round';
+  ctx.fillStyle = '#E4E9EE'; ctx.strokeStyle = '#7E8C97'; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(2, 0); ctx.quadraticCurveTo(-18, -11, -50, -9); ctx.lineTo(-50, 4); ctx.closePath(); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = '#6B4432'; roundRectPath(ctx, -84, -6, 35, 12, 5); ctx.fill();
+  ctx.fillStyle = '#E9D8C4'; dot(ctx, -74, 0, 1.8); dot(ctx, -60, 0, 1.8);
+  ctx.restore();
+}
+function drawPreview(a, b){
+  const u = unit(a, b), L = 700;
+  const p0 = { x: a.x - u.x * L, y: a.y - u.y * L }, p1 = { x: a.x + u.x * L, y: a.y + u.y * L };
+  ctx.save(); ctx.lineCap = 'round';
+  ctx.strokeStyle = 'rgba(255,255,255,.85)'; ctx.lineWidth = 5; line(ctx, p0, p1);
+  ctx.strokeStyle = INK; ctx.lineWidth = 2; ctx.setLineDash([9, 7]); line(ctx, p0, p1); ctx.setLineDash([]);
+  ctx.fillStyle = INK; dot(ctx, a.x, a.y, 4);
+  ctx.restore();
+  drawKnife(b, Math.atan2(u.y, u.x));
+}
+function halfPlanePath(c, a, u, n, sg){
+  const L = 1200, p = { x: a.x - u.x * L, y: a.y - u.y * L }, q = { x: a.x + u.x * L, y: a.y + u.y * L };
+  c.beginPath(); c.moveTo(p.x, p.y); c.lineTo(q.x, q.y);
+  c.lineTo(q.x + n.x * L * sg, q.y + n.y * L * sg); c.lineTo(p.x + n.x * L * sg, p.y + n.y * L * sg); c.closePath();
+}
+function drawLabel(pt, text, alpha){
+  ctx.save(); ctx.globalAlpha = alpha;
+  ctx.font = '19px Jua, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif';
+  const w = ctx.measureText(text).width + 18, h = 28;
+  const x = clamp(pt.x, w / 2 + 6, 394 - w / 2), y = clamp(pt.y, 20, 380);
+  ctx.fillStyle = 'rgba(255,248,236,.96)'; ctx.strokeStyle = INK; ctx.lineWidth = 2;
+  roundRectPath(ctx, x - w / 2, y - h / 2, w, h, 14); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = INK; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(text, x, y + 1);
+  ctx.restore();
+}
+function drawPieces(){
+  const { a, u, n, sep } = cut;
+  if (sep === 0){
+    ctx.drawImage(layer, 0, 0, 400, 400);
+    const P = { x: cut.e0.x + (cut.e1.x - cut.e0.x) * cut.prog, y: cut.e0.y + (cut.e1.y - cut.e0.y) * cut.prog };
+    ctx.save(); tracePoly(ctx, cake.poly); ctx.clip();
+    ctx.strokeStyle = INK; ctx.lineWidth = 2.5; line(ctx, cut.e0, P);
+    ctx.restore();
+    drawKnife(P, Math.atan2(u.y, u.x));
+    return;
+  }
+  [1, -1].forEach(sg => {
+    ctx.save();
+    ctx.translate(n.x * sep * sg, n.y * sep * sg);
+    halfPlanePath(ctx, a, u, n, sg); ctx.clip();
+    ctx.drawImage(layer, 0, 0, 400, 400);
+    tracePoly(ctx, cake.poly); ctx.clip();
+    ctx.strokeStyle = SPONGE; ctx.lineWidth = 8; line(ctx, cut.e0, cut.e1);
+    ctx.restore();
+  });
+  if (phase === 'reveal'){
+    drawLabel({ x: cut.cA.x + n.x * sep, y: cut.cA.y + n.y * sep }, cut.labelA, cut.labelAlpha);
+    drawLabel({ x: cut.cB.x - n.x * sep, y: cut.cB.y - n.y * sep }, cut.labelB, cut.labelAlpha);
+  }
+}
+function drawConfetti(){
+  confetti.forEach(p => {
+    ctx.save(); ctx.globalAlpha = clamp(p.life * 1.5); ctx.translate(p.x, p.y); ctx.rotate(p.rot);
+    ctx.fillStyle = p.c; ctx.fillRect(-4, -2.5, 8, 5); ctx.restore();
+  });
+}
+function draw(){
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.setTransform(view.k, 0, 0, view.k, 0, 0);
+  drawPlate();
+  if (!cake) return;
+  if (phase === 'cutting' || phase === 'reveal') drawPieces();
+  else {
+    ctx.drawImage(layer, 0, 0, 400, 400);
+    if (phase === 'drag' && drag && Math.hypot(drag.b.x - drag.a.x, drag.b.y - drag.a.y) > 6) drawPreview(drag.a, drag.b);
+  }
+  drawConfetti();
+}
+function resize(){
+  const wrap = $('board-wrap');
+  const size = Math.floor(Math.min(wrap.clientWidth - 24, wrap.clientHeight - 12));
+  if (size <= 0) return;
+  const dpr = Math.min(window.devicePixelRatio || 1, 3), px = Math.round(size * dpr);
+  canvas.style.width = canvas.style.height = size + 'px';
+  if (canvas.width !== px){ canvas.width = canvas.height = px; layer.width = layer.height = px; }
+  view.k = px / 400;
+  if (cake) renderLayer();
+  draw();
+}
+
+/* ===================== 애니메이션 루프 ===================== */
+const easeOutBack = t => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2); };
+function kick(){ if (!rafId) rafId = requestAnimationFrame(loop); }
+function loop(now){
+  rafId = 0;
+  let more = false;
+  if (phase === 'cutting'){
+    const t = now - cut.t0;
+    cut.prog = clamp(t / 220);
+    cut.sep = t < 220 ? 0 : Math.max(0.01, easeOutBack(clamp((t - 220) / 380)) * SEP);
+    if (t >= 600) finishCut(); else more = true;
+  }
+  if (phase === 'reveal' && cut.labelAlpha < 1){
+    cut.labelAlpha = clamp((now - cut.revealAt) / 250);
+    if (cut.labelAlpha < 1) more = true;
+  }
+  if (confetti.length){
+    confetti.forEach(p => { p.x += p.vx; p.y += p.vy; p.vy += 0.28; p.vx *= 0.99; p.rot += p.vr; p.life -= 0.012; });
+    confetti = confetti.filter(p => p.life > 0 && p.y < 440);
+    more = true;
+  }
+  draw();
+  if (more) kick();
+}
+function burst(){
+  if (reduceMotion) return;
+  const cols = ['#E4485A', '#FFC95E', '#AFCF8E', '#8F86C8', '#F9BFCA'];
+  for (let i = 0; i < 60; i++){
+    const ang = -Math.PI * Math.random(), sp = 4 + Math.random() * 5;
+    confetti.push({ x: 200, y: 200, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp - 2, rot: Math.random() * TAU, vr: Math.random() * 0.6 - 0.3, c: cols[i % 5], life: 1 });
+  }
+  kick();
+}
+
+/* ===================== 저울과 동생 ===================== */
+let scaleRaf = 0;
+function setScale(deg){
+  $('beam').setAttribute('transform', 'rotate(' + deg + ' 75 25)');
+  const r = deg * Math.PI / 180, dx = 54 * Math.cos(r), dy = 54 * Math.sin(r);
+  $('panL').setAttribute('transform', 'translate(' + (75 - dx) + ' ' + (25 - dy) + ')');
+  $('panR').setAttribute('transform', 'translate(' + (75 + dx) + ' ' + (25 + dy) + ')');
+}
+function animateScale(target){
+  cancelAnimationFrame(scaleRaf);
+  if (reduceMotion){ setScale(target); return; }
+  const t0 = performance.now();
+  const step = now => {
+    const t = (now - t0) / 1000;
+    if (t >= 1.2){ setScale(target); return; }
+    setScale(target * (1 - Math.exp(-5 * t) * Math.cos(10 * t)));
+    scaleRaf = requestAnimationFrame(step);
+  };
+  scaleRaf = requestAnimationFrame(step);
+}
+function loadScale(left, right, color){
+  [['blobL', left], ['blobR', right]].forEach(([id, share]) => {
+    const el = $(id), r = share ? 9 * Math.sqrt(share / 50) : 0;
+    el.setAttribute('r', r.toFixed(2)); el.setAttribute('cy', (20 - r * 0.55).toFixed(2));
+    el.setAttribute('fill', color || 'none'); el.setAttribute('stroke', share ? INK : 'none'); el.setAttribute('stroke-width', '1.2');
+  });
+}
+const pickLine = arr => arr[Math.floor(Math.random() * arr.length)];
+function setFace(mood){ $('face').innerHTML = FACES[mood] || FACES.idle; }
+
+/* ===================== 판정 ===================== */
+function scoreOf(pA){
+  const e = Math.abs(pA - 50);
+  return { e, perfect: Math.round(pA * 10) === 500, pts: Math.max(0, Math.round(100 - e * 10)) };
+}
+function gradeOf(r){
+  if (r.perfect) return GRADES[0];
+  return GRADES.slice(1).find(g => r.e < g.max);
+}
+const emojiOf = r => r.perfect ? '🎂' : r.e < 1 ? '🟩' : r.e < 3 ? '🟨' : r.e < 6 ? '🟧' : '🟥';
+function makeResult(ck, a, b, pA){ return Object.assign({ name: ck.name, a, b, pA }, scoreOf(pA)); }
+
+/* ===================== 진행 ===================== */
+function startChallenge(){
+  run = { mode: 'challenge', cakes: STAGES.map(s => buildCake(s.kind, s.flavor, s.name, Math.random)), results: [], idx: 0 };
+  showScreen('play');
+  loadCake(0);
+}
+function startDaily(){
+  const key = todayKey(), cakes = dailyCakes(key), saved = store.getJSON('daily');
+  const cuts = (saved && saved.date === key && Array.isArray(saved.cuts)) ? saved.cuts.slice(0, cakes.length) : [];
+  run = { mode: 'daily', dayKey: key, dayNum: dayNumber(key), cakes, idx: cuts.length,
+          results: cuts.map((c, i) => makeResult(cakes[i], c.a, c.b, c.pA)) };
+  if (run.idx >= cakes.length) return showResult();
+  showScreen('play');
+  loadCake(run.idx);
+}
+function loadCake(i){
+  run.idx = i; cake = run.cakes[i]; cut = null; drag = null; phase = 'aim'; confetti = [];
+  $('stage-no').textContent = (i + 1) + '/' + run.cakes.length;
+  $('stage-name').textContent = cake.name;
+  setFace('idle'); $('bubble').textContent = pickLine(IDLE_LINES);
+  const ratio = $('ratio'); ratio.textContent = '? : ?'; ratio.classList.add('wait');
+  const grade = $('grade'); grade.dataset.level = ''; $('grade-label').textContent = ''; $('grade-detail').textContent = '';
+  $('hint').textContent = '케이크를 가로질러 한 번에 그으세요';
+  loadScale(0, 0); cancelAnimationFrame(scaleRaf); setScale(0);
+  resize();
+}
+function toBoard(e){
+  const r = canvas.getBoundingClientRect();
+  return { x: (e.clientX - r.left) * 400 / r.width, y: (e.clientY - r.top) * 400 / r.height };
+}
+function release(){
+  const { a, b } = drag; drag = null;
+  if (Math.hypot(b.x - a.x, b.y - a.y) < 30){ phase = 'aim'; draw(); return; }
+  const pA = Math.abs(polyArea(clipHalf(cake.poly, a, b))) / cake.area * 100;
+  if (pA < 0.01 || pA > 99.99){ phase = 'aim'; draw(); toast('케이크를 가로질러 그어주세요'); return; }
+  startCut(a, b, pA);
+}
+function startCut(a, b, pA){
+  const u = unit(a, b), n = { x: -u.y, y: u.x };
+  const C = { x: 200, y: 200 }, B = u.x * (a.x - C.x) + u.y * (a.y - C.y);
+  const cc = (a.x - C.x) ** 2 + (a.y - C.y) ** 2 - 195 * 195, sq = Math.sqrt(Math.max(0, B * B - cc));
+  const e0 = { x: a.x + u.x * (-B - sq), y: a.y + u.y * (-B - sq) }, e1 = { x: a.x + u.x * (-B + sq), y: a.y + u.y * (-B + sq) };
+  const cA = centroid(clipHalf(cake.poly, a, b)), cB = centroid(clipHalf(cake.poly, b, a));
+  const dx = cB.x - cA.x, dy = cB.y - cA.y;
+  cut = { a, b, u, n, pA, e0, e1, cA, cB, prog: 0, sep: 0, labelAlpha: 0, t0: performance.now(),
+          aFirst: Math.abs(dx) >= Math.abs(dy) ? dx > 0 : dy > 0 };
+  phase = 'cutting';
+  Sound.cut();
+  kick();
+}
+function finishCut(){
+  phase = 'reveal';
+  cut.sep = SEP; cut.revealAt = performance.now(); cut.labelAlpha = 0;
+  const res = makeResult(cake, round2(cut.a), round2(cut.b), cut.pA);
+  run.results.push(res);
+  if (run.mode === 'daily'){
+    store.setJSON('daily', { date: run.dayKey, cuts: run.results.map(r => ({ a: r.a, b: r.b, pA: r.pA })) });
+    if (run.results.length === run.cakes.length) updateStreak(run.dayKey);
+  }
+  const dispA = Math.round(cut.pA * 10) / 10, dispB = Math.round((100 - dispA) * 10) / 10;
+  cut.labelA = dispA.toFixed(1) + '%'; cut.labelB = dispB.toFixed(1) + '%';
+  const [first, second] = cut.aFirst ? [dispA, dispB] : [dispB, dispA];
+
+  const g = gradeOf(res);
+  const ratio = $('ratio'); ratio.classList.remove('wait'); ratio.textContent = first.toFixed(1) + ' : ' + second.toFixed(1);
+  $('grade').dataset.level = g.level;
+  $('grade-label').textContent = g.label;
+  $('grade-detail').textContent = (res.perfect ? '' : '오차 ' + res.e.toFixed(1) + '% ') + '+' + res.pts + '점';
+  setFace(g.mood); $('bubble').textContent = pickLine(g.lines);
+  const last = run.results.length >= run.cakes.length;
+  $('hint').textContent = last ? '화면을 누르면 결과를 봐요' : '화면을 누르면 다음 케이크';
+
+  loadScale(first, second, cake.flavor.top);
+  animateScale(res.perfect ? 0 : Math.sign(second - first) * Math.min(25, res.e * 4));
+  Sound.result(g.level);
+  if (res.perfect){ burst(); try { navigator.vibrate && navigator.vibrate([30, 40, 30]); } catch(e){} }
+  kick();
+}
+function nextCake(){
+  if (run.idx + 1 < run.cakes.length) loadCake(run.idx + 1);
+  else showResult();
+}
+function updateStreak(key){
+  const st = store.getJSON('streak') || { last: null, count: 0 };
+  if (st.last === key) return;
+  st.count = st.last === yesterdayKey() ? st.count + 1 : 1;
+  st.last = key;
+  store.setJSON('streak', st);
+}
+function currentStreak(){
+  const st = store.getJSON('streak');
+  return (st && (st.last === todayKey() || st.last === yesterdayKey())) ? st.count : 0;
+}
+function exitRun(){
+  cancelAnimationFrame(rafId); rafId = 0; cancelAnimationFrame(scaleRaf);
+  phase = 'idle'; run = null; cake = null; cut = null; drag = null; confetti = [];
+  refreshStart();
+  showScreen('start');
+}
+
+/* ===================== 결과 ===================== */
+function showResult(){
+  const R = run.results, n = R.length;
+  const avg = R.reduce((s, r) => s + r.e, 0) / n, total = R.reduce((s, r) => s + r.pts, 0);
+  const perfects = R.filter(r => r.perfect).length;
+  const [, em, title] = TITLES.find(t => avg < t[0]);
+  const best = R.reduce((m, r) => r.e < m.e ? r : m, R[0]);
+  const daily = run.mode === 'daily';
+  phase = 'idle';
+
+  $('r-label').textContent = daily ? '오늘의 케이크 #' + run.dayNum : '10조각 도전 결과';
+  $('r-avg').textContent = avg.toFixed(1) + '%';
+  $('r-title').textContent = em + ' ' + title;
+  $('r-sub').textContent = total + '점' + (perfects ? ', 완벽한 반반 ' + perfects + '번' : '');
+  const emo = $('r-emojis'); emo.hidden = !daily; emo.textContent = daily ? R.map(emojiOf).join('') : '';
+
+  const badge = $('r-badge');
+  badge.hidden = false; badge.className = 'badge';
+  if (daily){
+    const s = currentStreak();
+    badge.hidden = !s; badge.textContent = '🔥 ' + s + '일 연속';
+  } else {
+    const prev = parseInt(store.get('best'), 10), hasPrev = Number.isFinite(prev);
+    if (!run.saved && (!hasPrev || total > prev)) store.set('best', total);
+    const isNew = !hasPrev || total > prev;
+    run.saved = true;
+    badge.className = 'badge' + (isNew ? ' new' : '');
+    badge.textContent = isNew ? (hasPrev ? '최고기록 갱신' : '첫 기록') : '내 최고 ' + prev + '점';
+  }
+
+  const extra = $('r-extra');
+  clearInterval(countdownTimer);
+  const bestLine = best.perfect
+    ? '가장 정확했던 케이크는 ' + best.name + ', 완벽한 반반이었어요.'
+    : '가장 정확했던 케이크는 ' + best.name + '(오차 ' + best.e.toFixed(1) + '%)예요.';
+  if (daily){
+    const tick = () => {
+      const now = new Date(), next = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+      const s = Math.max(0, Math.floor((next - now) / 1000));
+      extra.textContent = bestLine + ' 다음 케이크까지 ' + Math.floor(s / 3600) + ':' + pad(Math.floor(s % 3600 / 60)) + ':' + pad(s % 60);
+    };
+    tick(); countdownTimer = setInterval(tick, 1000);
+  } else extra.textContent = bestLine;
+
+  const btnA = $('btn-a'), btnB = $('btn-b');
+  if (daily){
+    btnA.textContent = '결과 공유하기'; btnA.onclick = shareResult;
+    btnB.textContent = '10조각 도전'; btnB.onclick = startChallenge;
+  } else {
+    btnA.textContent = '다시 하기'; btnA.onclick = startChallenge;
+    btnB.textContent = '결과 공유하기'; btnB.onclick = shareResult;
+  }
+
+  run.shareText = daily
+    ? '🎂 오늘의 케이크 #' + run.dayNum + '\n' + R.map(emojiOf).join('') + ' 평균 오차 ' + avg.toFixed(1) + '%\n👉 너도 잘라봐: ' + CONFIG.shareUrl
+    : '🎂 케이크 반 자르기 10조각 도전\n평균 오차 ' + avg.toFixed(1) + '%, ' + em + ' ' + title + ' (' + total + '점)\n'
+      + (perfects ? '완벽한 반반 ' + perfects + '번!\n' : '') + '👉 너도 잘라봐: ' + CONFIG.shareUrl;
+
+  const thumbs = $('r-thumbs'); thumbs.innerHTML = '';
+  const figs = R.map(r => {
+    const fig = document.createElement('figure'); fig.className = 'thumb';
+    const cv = document.createElement('canvas'); cv.setAttribute('aria-label', r.name + ' 오차 ' + r.e.toFixed(1) + '%');
+    const cap = document.createElement('figcaption'); cap.textContent = r.perfect ? '50:50' : r.e.toFixed(1) + '%';
+    fig.append(cv, cap); thumbs.appendChild(fig);
+    return cv;
+  });
+  showScreen('result');
+  $('screen-result').scrollTop = 0;
+  figs.forEach((cv, i) => drawThumb(cv, run.cakes[i], R[i]));
+}
+function drawThumb(cv, ck, r){
+  const css = cv.clientWidth || 60, dpr = Math.min(window.devicePixelRatio || 1, 3);
+  cv.width = cv.height = Math.round(css * dpr);
+  const c = cv.getContext('2d'), k = cv.width / 400;
+  c.setTransform(k, 0, 0, k, 0, 0);
+  c.fillStyle = '#FFFFFF'; dot(c, 200, 200, 192);
+  c.strokeStyle = INK; c.lineWidth = 8; c.beginPath(); c.arc(200, 200, 192, 0, TAU); c.stroke();
+  tracePoly(c, ck.poly); c.fillStyle = ck.flavor.top; c.fill(); c.lineWidth = 10; c.strokeStyle = ck.flavor.edge; c.stroke();
+  c.save(); c.beginPath(); c.arc(200, 200, 188, 0, TAU); c.clip();
+  const u = unit(r.a, r.b);
+  c.strokeStyle = '#B8303F'; c.lineWidth = 12; c.lineCap = 'round';
+  line(c, { x: r.a.x - u.x * 600, y: r.a.y - u.y * 600 }, { x: r.a.x + u.x * 600, y: r.a.y + u.y * 600 });
+  c.restore();
+}
+
+/* ===================== 공유 ===================== */
+let toastTimer = 0;
+function toast(text){
+  const t = $('toast'); t.textContent = text; t.classList.add('show');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 2200);
+}
+async function copyText(text){
+  try { if (navigator.clipboard && window.isSecureContext){ await navigator.clipboard.writeText(text); return true; } } catch(e){}
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text; ta.setAttribute('readonly', ''); ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    const ok = document.execCommand('copy'); ta.remove(); return ok;
+  } catch(e){ return false; }
+}
+async function shareResult(){
+  const text = run && run.shareText; if (!text) return;
+  if (navigator.share){
+    try { await navigator.share({ text }); return; }
+    catch(e){ if (e && e.name === 'AbortError') return; }
+  }
+  if (await copyText(text)){ toast('결과를 복사했어요. 원하는 곳에 붙여넣으세요'); return; }
+  $('copybox-text').value = text; $('copybox').hidden = false; $('copybox-text').focus(); $('copybox-text').select();
+}
+
+/* ===================== 화면 ===================== */
+function showScreen(name){
+  document.body.dataset.screen = name;
+  if (name !== 'result') clearInterval(countdownTimer);
+}
+function refreshStart(){
+  const best = parseInt(store.get('best'), 10);
+  $('st-challenge').textContent = Number.isFinite(best) ? '최고 ' + best + '점' : '첫 도전';
+  const key = todayKey(), saved = store.getJSON('daily');
+  const done = (saved && saved.date === key && Array.isArray(saved.cuts)) ? saved.cuts.length : 0;
+  $('daily-name').textContent = '오늘의 케이크 #' + dayNumber(key);
+  $('st-daily').textContent = done >= CONFIG.dailyCount ? '완료, 결과 보기' : done > 0 ? '이어서 하기 ' + done + '/' + CONFIG.dailyCount : '도전 가능';
+  const s = currentStreak();
+  $('daily-desc').textContent = '하루 한 번, 모두에게 같은 케이크 5개가 나와요' + (s ? '. 🔥 ' + s + '일 연속 참여 중' : '');
+}
+function renderMore(){
+  const list = CONFIG.otherGames.filter(g => g.url);
+  if (!list.length) return;
+  const box = $('more-list');
+  list.forEach(g => {
+    const a = document.createElement('a'); a.href = g.url; a.target = '_top';
+    const b = document.createElement('b'); b.textContent = g.name;
+    const s = document.createElement('span'); s.textContent = g.desc;
+    a.append(b, s); box.appendChild(a);
+  });
+  $('more').hidden = false;
+}
+
+/* ===================== 입력 ===================== */
+document.querySelectorAll('.mode').forEach(btn => {
+  btn.addEventListener('click', () => btn.dataset.mode === 'daily' ? startDaily() : startChallenge());
+});
+document.querySelectorAll('[data-sound]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    Sound.on = !Sound.on; store.set('sound', Sound.on ? '1' : '0');
+    if (Sound.on){ Sound.ctx(); Sound.notes([880], 'sine', 0, 0.12, 0.12); }
+    refreshSoundButtons();
+  });
+});
+canvas.addEventListener('pointerdown', e => {
+  if (!e.isPrimary || phase !== 'aim') return;
+  if (e.pointerType === 'mouse' && e.button !== 0) return;
+  e.preventDefault();
+  const p = toBoard(e);
+  drag = { a: p, b: p, id: e.pointerId };
+  phase = 'drag';
+  try { canvas.setPointerCapture(e.pointerId); } catch(_){}
+  draw();
+});
+canvas.addEventListener('pointermove', e => {
+  if (phase !== 'drag' || e.pointerId !== drag.id) return;
+  drag.b = toBoard(e); draw();
+});
+canvas.addEventListener('pointerup', e => {
+  if (phase !== 'drag' || e.pointerId !== drag.id) return;
+  drag.b = toBoard(e); release();
+});
+canvas.addEventListener('pointercancel', () => { if (phase === 'drag'){ phase = 'aim'; drag = null; draw(); } });
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+$('screen-play').addEventListener('pointerdown', e => {
+  if (!e.isPrimary || e.target.closest('button') || phase !== 'reveal') return;
+  e.preventDefault();
+  if (performance.now() - cut.revealAt > 450) nextCake();
+});
+document.addEventListener('keydown', e => {
+  if (document.body.dataset.screen !== 'play' || e.repeat) return;
+  if ((e.code === 'Space' || e.code === 'Enter') && phase === 'reveal'){
+    e.preventDefault();
+    if (performance.now() - cut.revealAt > 450) nextCake();
+  } else if (e.key === 'Escape') exitRun();
+});
+$('btn-exit').addEventListener('click', exitRun);
+$('btn-home').addEventListener('click', exitRun);
+$('copybox-close').addEventListener('click', () => { $('copybox').hidden = true; });
+window.addEventListener('resize', () => { if (document.body.dataset.screen === 'play') resize(); });
+if (window.ResizeObserver) new ResizeObserver(() => { if (document.body.dataset.screen === 'play') resize(); }).observe($('board-wrap'));
+
+refreshSoundButtons();
+refreshStart();
+renderMore();
+</script>
+</body>
+</html>
