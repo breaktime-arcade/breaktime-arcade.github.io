@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>도토리 저금통 - 쉬는시간 오락실</title>
+<style>
+  :root{--bg:#1f2a1c;--panel:#fff8e8;--ink:#3b2a1a;--accent:#d9822b;--leaf:#6aa84f;}
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+  html,body{height:100%;background:var(--bg);overflow:hidden;font-family:"Pretendard","Apple SD Gothic Neo","Malgun Gothic",sans-serif;color:var(--ink);}
+  #wrap{position:relative;width:100%;height:100%;display:flex;align-items:center;justify-content:center;}
+  #stage{position:relative;touch-action:none;user-select:none;-webkit-user-select:none;}
+  canvas{display:block;width:100%;height:100%;border-radius:14px;box-shadow:0 8px 30px rgba(0,0,0,.4);touch-action:none;}
+  #mute{position:absolute;top:10px;right:10px;width:40px;height:40px;border-radius:50%;border:none;background:rgba(255,248,232,.9);font-size:20px;cursor:pointer;z-index:5;box-shadow:0 2px 6px rgba(0,0,0,.25);}
+  .overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(31,42,28,.82);border-radius:14px;z-index:4;padding:24px;text-align:center;}
+  .hidden{display:none!important;}
+  .card{background:var(--panel);border-radius:18px;padding:22px 20px;max-width:340px;width:100%;box-shadow:0 6px 20px rgba(0,0,0,.35);}
+  h1{font-size:30px;margin-bottom:6px;color:#8a4b14;letter-spacing:-1px;}
+  h2{font-size:24px;margin-bottom:10px;color:#8a4b14;}
+  .sub{font-size:14px;color:#6b5540;margin-bottom:14px;}
+  .how{text-align:left;font-size:13.5px;line-height:1.6;background:#f3e6c8;border-radius:12px;padding:10px 12px;margin-bottom:14px;}
+  .how b{color:#8a4b14;}
+  button.big{background:var(--accent);color:#fff;border:none;border-radius:999px;font-size:18px;font-weight:700;padding:12px 34px;cursor:pointer;box-shadow:0 4px 0 #9c5a17;}
+  button.big:active{transform:translateY(3px);box-shadow:0 1px 0 #9c5a17;}
+  .best{margin-top:12px;font-size:14px;color:#6b5540;}
+  .score-big{font-size:44px;font-weight:800;color:#d9822b;margin:4px 0;}
+  .newrec{color:#c0392b;font-weight:800;margin-bottom:6px;}
+  .stats{font-size:14px;color:#6b5540;margin-bottom:14px;line-height:1.6;}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="stage">
+    <canvas id="c" width="400" height="700"></canvas>
+    <button id="mute" aria-label="음소거">🔊</button>
+
+    <div id="startScreen" class="overlay">
+      <div class="card">
+        <h1>🌰 도토리 저금통</h1>
+        <p class="sub">다람쥐의 겨울 식량, 바구니에 쏙쏙 모아 주세요!</p>
+        <div class="how">
+          <b>목표</b> 도토리를 튕겨 바구니에 넣기<br>
+          <b>마우스/터치</b> 아무 곳이나 누른 채 뒤로 당겼다 놓기<br>
+          <b>키보드</b> ←→ 각도 · ↑↓ 힘 · Space 발사 · M 음소거<br>
+          <b>뱅크샷</b> 벽·통나무에 맞고 들어가면 +50점씩<br>
+          <b>클린샷</b> 아무 데도 안 닿고 쏙! → 도토리 +1<br>
+          <b>연속 성공</b> 점수 배율 상승, 3연속마다 도토리 +1<br>
+          바람과 움직이는 바구니를 조심하세요. 도토리가 떨어지면 끝!
+        </div>
+        <button class="big" id="startBtn">시작하기</button>
+        <p class="best">최고 점수: <span id="bestStart">0</span></p>
+      </div>
+    </div>
+
+    <div id="overScreen" class="overlay hidden">
+      <div class="card">
+        <h2>겨울 준비 끝!</h2>
+        <div id="newRec" class="newrec hidden">🎉 새 최고 기록!</div>
+        <div class="score-big" id="finalScore">0</div>
+        <div class="stats" id="finalStats"></div>
+        <button class="big" id="retryBtn">다시 하기</button>
+        <p class="best">최고 점수: <span id="bestOver">0</span></p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  'use strict';
+  const W = 400, H = 700, GROUND = 640, GRAV = 900, R = 9;
+  const LAUNCH = { x: 62, y: 572 };
+  const MAX_SPEED = 1000;
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d');
+  const stage = document.getElementById('stage');
+  const muteBtn = document.getElementById('mute');
+  const $ = id => document.getElementById(id);
+
+  // ---------- storage ----------
+  const KEY = 'swit_acorn_bank_best';
+  function loadBest(){ try { return parseInt(localStorage.getItem(KEY) || '0', 10) || 0; } catch(e){ return 0; } }
+  function saveBest(v){ try { localStorage.setItem(KEY, String(v)); } catch(e){} }
+  let best = loadBest();
+
+  // ---------- layout ----------
+  function resize(){
+    const vw = window.innerWidth, vh = window.innerHeight;
+    const scale = Math.min(vw / W, vh / H) * 0.98;
+    stage.style.width = (W * scale) + 'px';
+    stage.style.height = (H * scale) + 'px';
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = Math.round(W * scale * dpr);
+    canvas.height = Math.round(H * scale * dpr);
+    ctx.setTransform(canvas.width / W, 0, 0, canvas.height / H, 0, 0);
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  // ---------- audio ----------
+  let actx = null, muted = false;
+  function ac(){
+    if (!actx) { try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch(e){ actx = null; } }
+    if (actx && actx.state === 'suspended') actx.resume();
+    return actx;
+  }
+  function tone(freq, dur, type='sine', vol=0.2, slideTo=null, delay=0){
+    if (muted) return; const a = ac(); if (!a) return;
+    const t = a.currentTime + delay;
+    const o = a.createOscillator(), g = a.createGain();
+    o.type = type; o.frequency.setValueAtTime(freq, t);
+    if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t + dur);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(vol, t + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g).connect(a.destination); o.start(t); o.stop(t + dur + 0.02);
+  }
+  function noise(dur, vol=0.15, freq=1200){
+    if (muted) return; const a = ac(); if (!a) return;
+    const len = Math.floor(a.sampleRate * dur);
+    const buf = a.createBuffer(1, len, a.sampleRate); const d = buf.getChannelData(0);
+    for (let i=0;i<len;i++) d[i] = (Math.random()*2-1) * (1 - i/len);
+    const s = a.createBufferSource(); s.buffer = buf;
+    const f = a.createBiquadFilter(); f.type='bandpass'; f.frequency.value = freq; f.Q.value = 0.8;
+    const g = a.createGain(); g.gain.value = vol;
+    s.connect(f).connect(g).connect(a.destination); s.start();
+  }
+  const sfx = {
+    launch(){ noise(0.25, 0.25, 900); tone(300, 0.18, 'triangle', 0.12, 700); },
+    bounce(v){ tone(180 + Math.min(v,800)*0.3, 0.07, 'square', 0.06); },
+    rim(){ tone(900, 0.1, 'triangle', 0.1, 600); },
+    score(streak){ const base = 523 * Math.pow(1.06, Math.min(streak,8)); [0,4,7,12].forEach((s,i)=>tone(base*Math.pow(2,s/12), 0.15, 'triangle', 0.14, null, i*0.07)); },
+    swish(){ tone(1318, 0.25, 'sine', 0.12, 1760, 0.28); },
+    miss(){ tone(330, 0.35, 'sawtooth', 0.07, 140); },
+    pickup(){ tone(988, 0.08, 'square', 0.08); tone(1480, 0.12, 'square', 0.08, null, 0.07); },
+    over(){ [392,330,262,196].forEach((f,i)=>tone(f, 0.28, 'triangle', 0.13, null, i*0.18)); },
+    click(){ tone(660, 0.05, 'square', 0.06); }
+  };
+  function toggleMute(){ muted = !muted; muteBtn.textContent = muted ? '🔇' : '🔊'; if(!muted) sfx.click(); }
+  muteBtn.addEventListener('click', e => { e.stopPropagation(); toggleMute(); });
+  muteBtn.addEventListener('pointerdown', e => e.stopPropagation());
+
+  // ---------- game state ----------
+  let state = 'menu'; // menu | aim | fly | result | over
+  let score, acorns, streak, round, made, shots, bestStreak;
+  let ball = null, basket, logs, wind, pinecone, particles, popups, resultTimer;
+  let aimAngle = 55 * Math.PI/180, aimPower = 0.6; // keyboard aim
+  let drag = null; // {sx,sy,cx,cy}
+  let squirrelPull = 0, time = 0;
+  const leaves = Array.from({length: 14}, () => ({ x: Math.random()*W, y: Math.random()*H, s: 0.5+Math.random(), r: Math.random()*6 }));
+
+  function resetGame(){
+    score = 0; acorns = 7; streak = 0; round = 1; made = 0; shots = 0; bestStreak = 0;
+    particles = []; popups = [];
+    setupRound();
+    state = 'aim';
+  }
+
+  function rand(a,b){ return a + Math.random()*(b-a); }
+
+  function setupRound(){
+    const lvl = round;
+    const bx = rand(190, 350), by = rand(lvl < 3 ? 400 : 230, 560);
+    basket = { x: bx, baseX: bx, y: by, halfW: Math.max(24, 34 - lvl*0.6), depth: 44,
+      move: lvl >= 5 ? Math.min(20 + (lvl-5)*6, 70) : 0, speed: rand(0.8, 1.3) + Math.min(lvl*0.05, 1), phase: Math.random()*6.28 };
+    if (basket.move) basket.baseX = Math.min(Math.max(bx, 150 + basket.move), 380 - basket.move);
+    wind = lvl >= 2 ? Math.round(rand(-1, 1) * Math.min(1, 0.3 + lvl*0.08) * 10) / 10 : 0;
+    logs = [];
+    const nLogs = lvl >= 3 ? Math.min(1 + Math.floor((lvl-3)/3), 3) : 0;
+    for (let i=0;i<nLogs;i++){
+      for (let t=0;t<20;t++){
+        const cx = rand(130, 360), cy = rand(150, 560), len = rand(50, 90), ang = rand(-0.6, 0.6);
+        const dx = Math.cos(ang)*len/2, dy = Math.sin(ang)*len/2;
+        const log = { x1: cx-dx, y1: cy-dy, x2: cx+dx, y2: cy+dy };
+        // keep away from basket mouth and launcher
+        if (Math.hypot(cx - basket.baseX, cy - basket.y) < 90 + basket.move) continue;
+        if (Math.hypot(cx - LAUNCH.x, cy - LAUNCH.y) < 110) continue;
+        if (logs.some(l => Math.hypot((l.x1+l.x2)/2 - cx, (l.y1+l.y2)/2 - cy) < 80)) continue;
+        logs.push(log); break;
+      }
+    }
+    pinecone = (lvl >= 2 && Math.random() < 0.45) ? { x: rand(140, 360), y: rand(120, 360), alive: true, t: 0 } : null;
+  }
+
+  function basketSegs(){
+    const b = basket, x = b.x, y = b.y, hw = b.halfW, d = b.depth;
+    return [
+      { x1: x-hw-4, y1: y, x2: x-hw+4, y2: y+d, rim: true },
+      { x1: x+hw+4, y1: y, x2: x+hw-4, y2: y+d, rim: true },
+      { x1: x-hw+4, y1: y+d, x2: x+hw-4, y2: y+d, bottom: true }
+    ];
+  }
+
+  function launch(vx, vy){
+    if (state !== 'aim' || acorns <= 0) return;
+    acorns--; shots++;
+    ball = { x: LAUNCH.x, y: LAUNCH.y, vx, vy, bounces: 0, touched: false, t: 0, still: 0, trail: [], rot: 0 };
+    state = 'fly'; squirrelPull = 0;
+    sfx.launch();
+  }
+
+  function aimVector(){
+    if (drag){
+      let dx = drag.sx - drag.cx, dy = drag.sy - drag.cy;
+      const len = Math.hypot(dx, dy);
+      const p = Math.min(len / 160, 1);
+      if (len < 4) return null;
+      return { vx: dx/len * p * MAX_SPEED, vy: dy/len * p * MAX_SPEED, p };
+    }
+    return { vx: Math.cos(aimAngle) * aimPower * MAX_SPEED, vy: -Math.sin(aimAngle) * aimPower * MAX_SPEED, p: aimPower };
+  }
+
+  // ---------- physics ----------
+  function collideSeg(b, s){
+    const ex = s.x2 - s.x1, ey = s.y2 - s.y1;
+    const l2 = ex*ex + ey*ey;
+    let t = ((b.x - s.x1)*ex + (b.y - s.y1)*ey) / l2;
+    t = Math.max(0, Math.min(1, t));
+    const px = s.x1 + ex*t, py = s.y1 + ey*t;
+    let nx = b.x - px, ny = b.y - py;
+    const dist = Math.hypot(nx, ny);
+    const rad = s.thick ? R + s.thick : R + 3;
+    if (dist >= rad || dist === 0) return false;
+    nx /= dist; ny /= dist;
+    b.x = px + nx * rad; b.y = py + ny * rad;
+    const vn = b.vx*nx + b.vy*ny;
+    if (vn < 0){
+      const e = 0.55, fr = 0.92;
+      const tx = -ny, ty = nx; const vt = b.vx*tx + b.vy*ty;
+      b.vx = tx*vt*fr - nx*vn*e; b.vy = ty*vt*fr - ny*vn*e;
+      return -vn;
+    }
+    return 0.001;
+  }
+
+  function step(dt){
+    time += dt;
+    if (basket.move){ basket.x = basket.baseX + Math.sin(time * basket.speed + basket.phase) * basket.move; }
+    if (pinecone) pinecone.t += dt;
+    if (state !== 'fly' || !ball) return;
+    const b = ball;
+    b.t += dt;
+    b.vy += GRAV * dt;
+    b.vx += wind * 140 * dt;
+    b.x += b.vx * dt; b.y += b.vy * dt;
+    b.rot += b.vx * dt * 0.05;
+    // walls
+    if (b.x < R){ b.x = R; if (b.vx < 0){ b.vx = -b.vx*0.6; b.bounces++; b.touched = true; sfx.bounce(Math.abs(b.vx)); spark(b.x, b.y, '#c9b28a'); popup(b.x+20, b.y, '뱅크!', '#fff'); } }
+    if (b.x > W - R){ b.x = W - R; if (b.vx > 0){ b.vx = -b.vx*0.6; b.bounces++; b.touched = true; sfx.bounce(Math.abs(b.vx)); spark(b.x, b.y, '#c9b28a'); popup(b.x-20, b.y, '뱅크!', '#fff'); } }
+    // ground
+    let onGround = false;
+    if (b.y > GROUND - R){
+      b.y = GROUND - R; onGround = true; b.touched = true;
+      if (b.vy > 60) sfx.bounce(b.vy * 0.5);
+      b.vy = -b.vy * 0.35; b.vx *= 0.9;
+      if (Math.abs(b.vy) < 40) b.vy = 0;
+    }
+    // logs
+    for (const l of logs){
+      const hit = collideSeg(b, Object.assign({ thick: 6 }, l));
+      if (hit){ b.touched = true; if (hit > 60){ b.bounces++; sfx.bounce(hit); spark(b.x, b.y, '#a0703f'); popup(b.x, b.y-18, '뱅크!', '#fff'); } }
+    }
+    // basket
+    for (const s of basketSegs()){
+      const hit = collideSeg(b, s);
+      if (hit){ b.touched = true; if (hit > 60) (s.rim ? sfx.rim() : sfx.bounce(hit)); }
+    }
+    // pinecone pickup
+    if (pinecone && pinecone.alive && Math.hypot(b.x - pinecone.x, b.y - (pinecone.y + Math.sin(pinecone.t*3)*6)) < R + 16){
+      pinecone.alive = false; acorns += 1; sfx.pickup(); popup(pinecone.x, pinecone.y - 20, '도토리 +1', '#ffe066');
+      for (let i=0;i<14;i++) particles.push({ x: pinecone.x, y: pinecone.y, vx: rand(-150,150), vy: rand(-200,50), life: 0.8, c: '#ffd34d' });
+    }
+    // scoring: inside basket
+    const bk = basket;
+    if (b.x > bk.x - bk.halfW + 2 && b.x < bk.x + bk.halfW - 2 && b.y > bk.y + 10 && b.y < bk.y + bk.depth){
+      scored(); return;
+    }
+    // trail
+    b.trail.push({ x: b.x, y: b.y }); if (b.trail.length > 18) b.trail.shift();
+    // stop conditions
+    const speed = Math.hypot(b.vx, b.vy);
+    if (onGround && speed < 30) b.still += dt; else b.still = 0;
+    if (b.still > 0.3 || b.t > 9) missed();
+  }
+
+  function scored(){
+    const b = ball; const bk = basket;
+    const clean = !b.touched;
+    streak++; made++; bestStreak = Math.max(bestStreak, streak);
+    const mult = Math.min(streak, 5);
+    const pts = (100 + b.bounces * 50 + (clean ? 50 : 0)) * mult;
+    score += pts;
+    let bonus = 0;
+    if (clean) bonus++;
+    if (streak % 3 === 0) bonus++;
+    acorns += bonus;
+    sfx.score(streak); if (clean) sfx.swish();
+    popup(bk.x, bk.y - 30, '+' + pts, '#ffe066', 26);
+    if (b.bounces) popup(bk.x, bk.y - 58, '뱅크샷 x' + b.bounces, '#fff');
+    if (clean) popup(bk.x, bk.y - (b.bounces ? 84 : 58), '클린샷! 도토리 +1', '#9fe870');
+    if (streak % 3 === 0) popup(bk.x, bk.y - 110, streak + '연속! 도토리 +1', '#ffb3c1');
+    for (let i=0;i<20;i++) particles.push({ x: bk.x, y: bk.y, vx: rand(-180,180), vy: rand(-320,-60), life: 1, c: ['#ffd34d','#9fe870','#ff9f43','#fff'][i%4] });
+    ball = null; state = 'result'; resultTimer = 0.9;
+    round++; needNewLayout = true;
+  }
+
+  function missed(){
+    streak = 0; sfx.miss();
+    popup(ball.x, ball.y - 24, '아깝다!', '#ffb3b3');
+    ball = null; state = 'result'; resultTimer = 0.7;
+  }
+
+  function afterResult(){
+    if (acorns <= 0){ gameOver(); return; }
+    if (needNewLayout){ setupRound(); needNewLayout = false; }
+    state = 'aim';
+  }
+  let needNewLayout = false;
+
+  function gameOver(){
+    state = 'over'; sfx.over();
+    const isNew = score > best;
+    if (isNew){ best = score; saveBest(best); }
+    $('finalScore').textContent = score.toLocaleString();
+    const rate = shots ? Math.round(made / shots * 100) : 0;
+    $('finalStats').innerHTML = `넣은 도토리 ${made}개 / 던진 도토리 ${shots}개 (성공률 ${rate}%)<br>최고 연속 성공 ${bestStreak}회 · 도달 라운드 ${round}`;
+    $('newRec').classList.toggle('hidden', !isNew);
+    $('bestOver').textContent = best.toLocaleString();
+    $('overScreen').classList.remove('hidden');
+  }
+
+  function spark(x, y, c){ for (let i=0;i<6;i++) particles.push({ x, y, vx: rand(-120,120), vy: rand(-120,60), life: 0.4, c }); }
+  function popup(x, y, text, color, size=16){ popups.push({ x: Math.max(50, Math.min(W-50, x)), y, text, color, size, life: 1.1 }); }
+
+  // ---------- drawing ----------
+  function drawBG(){
+    const g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, '#f7c98b'); g.addColorStop(0.55, '#f3a86b'); g.addColorStop(1, '#c9764a');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    // sun
+    ctx.fillStyle = 'rgba(255,240,200,.6)'; ctx.beginPath(); ctx.arc(320, 130, 46, 0, 7); ctx.fill();
+    // hills
+    ctx.fillStyle = '#b86a3f'; ctx.beginPath(); ctx.moveTo(0, 560);
+    for (let x=0;x<=W;x+=20) ctx.lineTo(x, 540 + Math.sin(x*0.02)*20); ctx.lineTo(W, H); ctx.lineTo(0, H); ctx.fill();
+    // falling leaves
+    for (const l of leaves){
+      l.y += l.s * 0.5; l.x += Math.sin(time + l.r) * 0.3 + wind * 0.6 * l.s;
+      if (l.y > H) { l.y = -10; l.x = Math.random()*W; } if (l.x > W+10) l.x = -10; if (l.x < -10) l.x = W+10;
+      ctx.save(); ctx.translate(l.x, l.y); ctx.rotate(time*l.s + l.r);
+      ctx.fillStyle = 'rgba(200,80,40,.55)'; ctx.beginPath(); ctx.ellipse(0, 0, 5, 2.5, 0, 0, 7); ctx.fill(); ctx.restore();
+    }
+    // ground
+    ctx.fillStyle = '#6b4a2b'; ctx.fillRect(0, GROUND, W, H - GROUND);
+    ctx.fillStyle = '#7f9c3c'; ctx.fillRect(0, GROUND - 4, W, 8);
+    // tree stump for squirrel
+    ctx.fillStyle = '#8b5a2b'; ctx.fillRect(30, 592, 64, 50);
+    ctx.fillStyle = '#c89b63'; ctx.beginPath(); ctx.ellipse(62, 592, 32, 8, 0, 0, 7); ctx.fill();
+    ctx.strokeStyle = '#8b5a2b'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.ellipse(62, 592, 18, 4, 0, 0, 7); ctx.stroke();
+  }
+
+  function drawAcorn(x, y, r, rot=0, gold=false){
+    ctx.save(); ctx.translate(x, y); ctx.rotate(rot);
+    ctx.fillStyle = gold ? '#f2c230' : '#b5652a';
+    ctx.beginPath(); ctx.ellipse(0, r*0.25, r*0.9, r*1.05, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = gold ? '#b88a10' : '#6e4521';
+    ctx.beginPath(); ctx.ellipse(0, -r*0.35, r*1.05, r*0.55, 0, 0, 7); ctx.fill();
+    ctx.fillRect(-1.2, -r*1.15, 2.4, r*0.5);
+    ctx.fillStyle = 'rgba(255,255,255,.35)'; ctx.beginPath(); ctx.ellipse(-r*0.35, r*0.25, r*0.2, r*0.4, 0, 0, 7); ctx.fill();
+    ctx.restore();
+  }
+
+  function drawSquirrel(){
+    const x = LAUNCH.x - 18, y = 590;
+    const bob = Math.sin(time*3) * 1.5;
+    ctx.save(); ctx.translate(x, y + bob);
+    // tail
+    ctx.fillStyle = '#c0692f'; ctx.beginPath();
+    ctx.moveTo(-6, -4); ctx.bezierCurveTo(-40, -10, -34, -62, -8, -58); ctx.bezierCurveTo(-24, -44, -20, -20, -2, -10); ctx.fill();
+    ctx.fillStyle = '#e39b5f'; ctx.beginPath(); ctx.ellipse(-20, -40, 6, 12, -0.4, 0, 7); ctx.fill();
+    // body
+    ctx.fillStyle = '#d27a3c'; ctx.beginPath(); ctx.ellipse(4, -14, 13, 16, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = '#f4d3a8'; ctx.beginPath(); ctx.ellipse(8, -10, 7, 10, 0, 0, 7); ctx.fill();
+    // head
+    ctx.fillStyle = '#d27a3c'; ctx.beginPath(); ctx.arc(8, -34, 11, 0, 7); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(1,-42); ctx.lineTo(3,-52); ctx.lineTo(8,-43); ctx.fill();
+    ctx.fillStyle = '#222'; ctx.beginPath(); ctx.arc(12, -36, 2, 0, 7); ctx.fill();
+    ctx.fillStyle = '#5a2e14'; ctx.beginPath(); ctx.arc(18, -32, 1.8, 0, 7); ctx.fill();
+    ctx.fillStyle = '#f7a1a1'; ctx.beginPath(); ctx.arc(12, -30, 2.2, 0, 7); ctx.fill();
+    ctx.restore();
+  }
+
+  function drawBasket(){
+    const b = basket, x = b.x, y = b.y, hw = b.halfW, d = b.depth;
+    ctx.save();
+    ctx.fillStyle = '#a8743f'; ctx.strokeStyle = '#6e4521'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(x-hw-4, y); ctx.lineTo(x+hw+4, y); ctx.lineTo(x+hw-4, y+d); ctx.lineTo(x-hw+4, y+d); ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.strokeStyle = 'rgba(110,69,33,.6)'; ctx.lineWidth = 1.5;
+    for (let i=1;i<4;i++){ ctx.beginPath(); ctx.moveTo(x-hw-4+ i*0.5*2, y + i*d/4); ctx.lineTo(x+hw+4 - i*2, y + i*d/4); ctx.stroke(); }
+    ctx.fillStyle = '#5a3417'; ctx.beginPath(); ctx.ellipse(x, y, hw+4, 5, 0, 0, 7); ctx.fill();
+    ctx.strokeStyle = '#d9a066'; ctx.lineWidth = 3; ctx.beginPath(); ctx.ellipse(x, y, hw+4, 5, 0, 0, 7); ctx.stroke();
+    // post under basket
+    ctx.fillStyle = '#6e4521'; ctx.fillRect(x-3, y+d, 6, Math.max(0, GROUND - y - d));
+    ctx.restore();
+    if (b.move){
+      ctx.fillStyle = 'rgba(255,255,255,.5)'; ctx.font = '11px sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText('↔', x, y + d + 16);
+    }
+  }
+
+  function drawLogs(){
+    for (const l of logs){
+      ctx.save(); ctx.lineCap = 'round';
+      ctx.strokeStyle = '#5c3a1c'; ctx.lineWidth = 14; ctx.beginPath(); ctx.moveTo(l.x1, l.y1); ctx.lineTo(l.x2, l.y2); ctx.stroke();
+      ctx.strokeStyle = '#8b5a2b'; ctx.lineWidth = 10; ctx.beginPath(); ctx.moveTo(l.x1, l.y1); ctx.lineTo(l.x2, l.y2); ctx.stroke();
+      ctx.fillStyle = '#d7b07a'; ctx.beginPath(); ctx.arc(l.x2, l.y2, 5, 0, 7); ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  function drawPinecone(){
+    if (!pinecone || !pinecone.alive) return;
+    const y = pinecone.y + Math.sin(pinecone.t*3)*6;
+    ctx.save(); ctx.globalAlpha = 0.35 + 0.15*Math.sin(pinecone.t*5);
+    ctx.fillStyle = '#fff3b0'; ctx.beginPath(); ctx.arc(pinecone.x, y, 18, 0, 7); ctx.fill(); ctx.restore();
+    drawAcorn(pinecone.x, y, 10, Math.sin(pinecone.t*2)*0.3, true);
+  }
+
+  function drawAim(){
+    const v = aimVector(); if (!v) return;
+    // short trajectory preview
+    let x = LAUNCH.x, y = LAUNCH.y, vx = v.vx, vy = v.vy;
+    ctx.fillStyle = 'rgba(255,255,255,.85)';
+    const dt = 1/60;
+    for (let i=0;i<26;i++){
+      for (let k=0;k<2;k++){ vy += GRAV*dt; vx += wind*140*dt; x += vx*dt; y += vy*dt; }
+      if (i % 2 === 0){ ctx.globalAlpha = 1 - i/26; ctx.beginPath(); ctx.arc(x, y, 3, 0, 7); ctx.fill(); }
+    }
+    ctx.globalAlpha = 1;
+    // power bar
+    ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.fillRect(20, 650, 90, 10);
+    ctx.fillStyle = v.p > 0.85 ? '#e74c3c' : '#ffd34d'; ctx.fillRect(20, 650, 90*v.p, 10);
+    if (drag){
+      ctx.strokeStyle = 'rgba(255,255,255,.5)'; ctx.setLineDash([4,4]); ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(drag.sx, drag.sy); ctx.lineTo(drag.cx, drag.cy); ctx.stroke(); ctx.setLineDash([]);
+    }
+  }
+
+  function drawHUD(){
+    ctx.save();
+    ctx.fillStyle = 'rgba(59,42,26,.55)'; roundRect(10, 10, 200, 58, 12); ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.font = 'bold 22px sans-serif'; ctx.textAlign = 'left';
+    ctx.fillText(score.toLocaleString(), 22, 37);
+    ctx.font = '12px sans-serif'; ctx.fillStyle = '#ffe9c4';
+    ctx.fillText('라운드 ' + round + (streak > 1 ? '  ·  ' + streak + '연속 x' + Math.min(streak,5) : ''), 22, 57);
+    // acorns
+    const n = acorns;
+    for (let i=0;i<Math.min(n, 10);i++) drawAcorn(236 + (i%5)*18, 24 + Math.floor(i/5)*22, 7);
+    if (n > 10){ ctx.fillStyle = '#fff'; ctx.font = 'bold 12px sans-serif'; ctx.fillText('+' + (n-10), 326, 50); }
+    // wind
+    if (wind !== 0){
+      ctx.fillStyle = 'rgba(59,42,26,.45)'; roundRect(W/2 - 50, 78, 100, 26, 13); ctx.fill();
+      ctx.fillStyle = '#fff'; ctx.font = '13px sans-serif'; ctx.textAlign = 'center';
+      const arrows = wind > 0 ? '→'.repeat(Math.max(1, Math.round(Math.abs(wind)*3))) : '←'.repeat(Math.max(1, Math.round(Math.abs(wind)*3)));
+      ctx.fillText('바람 ' + arrows, W/2, 96);
+    }
+    ctx.restore();
+  }
+
+  function roundRect(x, y, w, h, r){ ctx.beginPath(); ctx.moveTo(x+r, y); ctx.arcTo(x+w, y, x+w, y+h, r); ctx.arcTo(x+w, y+h, x, y+h, r); ctx.arcTo(x, y+h, x, y, r); ctx.arcTo(x, y, x+w, y, r); ctx.closePath(); }
+
+  function draw(dt){
+    drawBG();
+    drawLogs();
+    drawPinecone();
+    drawBasket();
+    drawSquirrel();
+    if (state === 'aim'){ drawAcorn(LAUNCH.x, LAUNCH.y, R, 0); drawAim(); }
+    if (ball){
+      ctx.fillStyle = 'rgba(255,255,255,.3)';
+      ball.trail.forEach((p, i) => { ctx.globalAlpha = i/ball.trail.length*0.5; ctx.beginPath(); ctx.arc(p.x, p.y, R*0.6, 0, 7); ctx.fill(); });
+      ctx.globalAlpha = 1;
+      drawAcorn(ball.x, ball.y, R, ball.rot);
+    }
+    // particles
+    for (let i=particles.length-1;i>=0;i--){
+      const p = particles[i]; p.life -= dt; p.vy += 500*dt; p.x += p.vx*dt; p.y += p.vy*dt;
+      if (p.life <= 0){ particles.splice(i,1); continue; }
+      ctx.globalAlpha = Math.min(1, p.life*2); ctx.fillStyle = p.c; ctx.fillRect(p.x-2, p.y-2, 4, 4);
+    }
+    ctx.globalAlpha = 1;
+    // popups
+    ctx.textAlign = 'center';
+    for (let i=popups.length-1;i>=0;i--){
+      const p = popups[i]; p.life -= dt; p.y -= 30*dt;
+      if (p.life <= 0){ popups.splice(i,1); continue; }
+      ctx.globalAlpha = Math.min(1, p.life*2);
+      ctx.font = 'bold ' + p.size + 'px sans-serif';
+      ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(59,42,26,.8)'; ctx.strokeText(p.text, p.x, p.y);
+      ctx.fillStyle = p.color; ctx.fillText(p.text, p.x, p.y);
+    }
+    ctx.globalAlpha = 1;
+    if (state !== 'menu') drawHUD();
+    if (state === 'aim' && shots === 0 && !drag){
+      ctx.fillStyle = 'rgba(255,255,255,.9)'; ctx.font = 'bold 14px sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText('화면을 누른 채 뒤로 당겼다 놓으세요', W/2, 690 - 30 + Math.sin(time*4)*2);
+    }
+  }
+
+  // ---------- loop ----------
+  let last = performance.now(), acc = 0;
+  function frame(now){
+    let dt = Math.min((now - last) / 1000, 0.05); last = now;
+    if (state === 'aim') handleKeys(dt);
+    acc += dt; const FIXED = 1/120;
+    while (acc >= FIXED){ step(FIXED); acc -= FIXED; }
+    if (state === 'result'){
+      resultTimer -= dt;
+      if (resultTimer <= 0) afterResult();
+    }
+    draw(dt);
+    requestAnimationFrame(frame);
+  }
+
+  // ---------- input ----------
+  function toLocal(e){
+    const r = canvas.getBoundingClientRect();
+    return { x: (e.clientX - r.left) / r.width * W, y: (e.clientY - r.top) / r.height * H };
+  }
+  canvas.addEventListener('pointerdown', e => {
+    ac();
+    if (state !== 'aim') return;
+    const p = toLocal(e);
+    drag = { sx: p.x, sy: p.y, cx: p.x, cy: p.y };
+    try { canvas.setPointerCapture(e.pointerId); } catch(_){}
+    e.preventDefault();
+  });
+  canvas.addEventListener('pointermove', e => {
+    if (!drag) return; const p = toLocal(e); drag.cx = p.x; drag.cy = p.y; e.preventDefault();
+  });
+  function endDrag(e){
+    if (!drag) return;
+    const v = aimVector(); drag = null;
+    if (v && v.p > 0.08 && state === 'aim'){
+      // sync keyboard aim with last drag
+      aimAngle = Math.atan2(-v.vy, v.vx); aimPower = v.p;
+      launch(v.vx, v.vy);
+    }
+  }
+  canvas.addEventListener('pointerup', endDrag);
+  canvas.addEventListener('pointercancel', () => { drag = null; });
+
+  const keys = {};
+  window.addEventListener('keydown', e => {
+    if (['ArrowLeft','ArrowRight','ArrowUp','ArrowDown',' '].includes(e.key)) e.preventDefault();
+    keys[e.key] = true;
+    if (e.key === 'm' || e.key === 'M'){ toggleMute(); return; }
+    if (e.key === ' ' || e.key === 'Enter'){
+      ac();
+      if (state === 'menu'){ startGame(); return; }
+      if (state === 'over'){ startGame(); return; }
+      if (state === 'aim' && e.key === ' '){ const v = aimVector(); launch(v.vx, v.vy); }
+    }
+  });
+  window.addEventListener('keyup', e => { keys[e.key] = false; });
+  function handleKeys(dt){
+    if (keys['ArrowLeft']) aimAngle = Math.min(aimAngle + 1.2*dt, 1.5);
+    if (keys['ArrowRight']) aimAngle = Math.max(aimAngle - 1.2*dt, -0.3);
+    if (keys['ArrowUp']) aimPower = Math.min(aimPower + 0.5*dt, 1);
+    if (keys['ArrowDown']) aimPower = Math.max(aimPower - 0.5*dt, 0.1);
+  }
+
+  function startGame(){
+    ac(); sfx.click();
+    $('startScreen').classList.add('hidden');
+    $('overScreen').classList.add('hidden');
+    resetGame();
+  }
+  $('startBtn').addEventListener('click', startGame);
+  $('retryBtn').addEventListener('click', startGame);
+  $('bestStart').textContent = best.toLocaleString();
+
+  // initial scenery for menu
+  round = 1; score = 0; acorns = 7; streak = 0; particles = []; popups = [];
+  setupRound();
+  requestAnimationFrame(frame);
+
+  // expose for testing
+  window.__acorn = { get state(){ return state; }, get score(){ return score; }, get acorns(){ return acorns; }, get round(){ return round; }, launch: (vx,vy)=>launch(vx,vy), get ball(){ return ball; }, get basket(){ return basket; }, get wind(){ return wind; } };
+})();
+</script>
+</body>
+</html>
