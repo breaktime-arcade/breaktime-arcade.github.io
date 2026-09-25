@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>오리 뽑기 자판기 합체 | 쉬는시간 오락실</title>
+<style>
+  :root{
+    --bg1:#0b1230;
+    --bg2:#1c2a5e;
+    --capsule1:#fff4d6;
+    --capsule2:#ffe08a;
+    --accent:#ff8fab;
+    --good:#5eead4;
+    --bad:#ff6b6b;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{
+    margin:0; padding:0; width:100%; height:100%;
+    background:#05070f;
+    overflow:hidden;
+    font-family:"Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",sans-serif;
+    touch-action:none;
+    -webkit-user-select:none; user-select:none;
+  }
+  #stage{
+    position:fixed; left:0; top:0; width:100%; height:100%;
+    display:flex; align-items:center; justify-content:center;
+    background:radial-gradient(circle at 50% 20%, var(--bg2), var(--bg1) 70%);
+    padding-top:env(safe-area-inset-top,0);
+    padding-bottom:env(safe-area-inset-bottom,0);
+    padding-left:env(safe-area-inset-left,0);
+    padding-right:env(safe-area-inset-right,0);
+  }
+  #game-wrapper{
+    position:relative;
+    width:400px; height:700px;
+    transform-origin:center center;
+    flex:none;
+  }
+  .screen{
+    position:absolute; inset:0;
+    display:flex; flex-direction:column;
+    border-radius:22px;
+    overflow:hidden;
+    background:linear-gradient(180deg,#182552,#0d1636);
+    box-shadow:0 0 0 4px rgba(255,255,255,0.06), 0 20px 60px rgba(0,0,0,0.5);
+  }
+  .hidden{ display:none !important; }
+
+  /* ---------- overlay screens (start / gameover) ---------- */
+  .overlay{
+    align-items:center;
+    padding:28px 22px;
+    overflow-y:auto;
+  }
+  .overlay > *:first-child{ margin-top:auto; }
+  .overlay > *:last-child{ margin-bottom:auto; }
+  .logo-duck{
+    font-size:56px; line-height:1; margin-bottom:6px; text-align:center;
+  }
+  h1.title{
+    color:#fff; font-size:24px; margin:0 0 6px; text-align:center; font-weight:800;
+    letter-spacing:-0.5px;
+  }
+  p.sub{
+    color:#b9c2e8; font-size:14px; text-align:center; margin:0 0 18px; line-height:1.6;
+  }
+  .howto{
+    background:rgba(255,255,255,0.06);
+    border-radius:14px;
+    padding:14px 16px;
+    width:100%;
+    max-width:320px;
+    margin:0 0 18px;
+    color:#dfe4ff;
+    font-size:13px;
+    line-height:1.7;
+  }
+  .howto b{ color:#ffe08a; }
+  .btn{
+    appearance:none; border:none; cursor:pointer;
+    background:linear-gradient(180deg,#ffd873,#ffb648);
+    color:#3a2400; font-weight:800; font-size:17px;
+    padding:14px 34px; border-radius:999px;
+    box-shadow:0 6px 0 #c9842a, 0 10px 18px rgba(0,0,0,0.35);
+    transition:transform .08s ease;
+  }
+  .btn:active{ transform:translateY(4px); box-shadow:0 2px 0 #c9842a; }
+  .btn.secondary{
+    background:linear-gradient(180deg,#4a5aa8,#33408a);
+    color:#fff;
+    box-shadow:0 6px 0 #222c66, 0 10px 18px rgba(0,0,0,0.35);
+  }
+  .btn.secondary:active{ box-shadow:0 2px 0 #222c66; }
+
+  .score-big{ font-size:42px; font-weight:900; color:#ffe08a; margin:2px 0 2px; }
+  .score-label{ color:#b9c2e8; font-size:13px; margin-bottom:14px; }
+  .best-row{
+    display:flex; align-items:center; gap:8px;
+    color:#fff; font-size:14px; margin-bottom:22px;
+    background:rgba(255,255,255,0.08); padding:8px 16px; border-radius:999px;
+  }
+  .new-best{
+    color:#5eead4; font-weight:800; font-size:13px; margin-top:-14px; margin-bottom:16px;
+  }
+
+  /* ---------- in-game hud ---------- */
+  #hud{
+    flex:none;
+    display:flex; align-items:center; justify-content:space-between;
+    padding:14px 16px 8px;
+    color:#fff;
+  }
+  #lives{ font-size:18px; letter-spacing:2px; }
+  #scoreWrap{ text-align:center; }
+  #scoreVal{ font-size:20px; font-weight:800; color:#ffe08a; }
+  #scoreCap{ font-size:10px; color:#9aa6da; letter-spacing:1px; }
+  #muteBtn{
+    width:34px; height:34px; border-radius:50%; border:none;
+    background:rgba(255,255,255,0.12); color:#fff; font-size:16px;
+    cursor:pointer; display:flex; align-items:center; justify-content:center;
+    flex:none;
+  }
+
+  #targetArea{
+    flex:none;
+    margin:2px 16px 10px;
+    background:rgba(255,255,255,0.08);
+    border-radius:16px;
+    padding:10px 14px 12px;
+  }
+  #targetRow{
+    display:flex; align-items:center; justify-content:center; gap:10px;
+    color:#dfe4ff; font-size:13px;
+  }
+  #targetNum{
+    font-size:26px; font-weight:900; color:#ff8fab;
+    background:#241a3a; border-radius:10px; padding:2px 14px;
+  }
+  #timerBarOuter{
+    margin-top:8px; height:7px; border-radius:5px; background:rgba(255,255,255,0.12); overflow:hidden;
+  }
+  #timerBarInner{
+    height:100%; width:100%; border-radius:5px;
+    background:linear-gradient(90deg,#5eead4,#ffe08a);
+    transition:width .08s linear;
+  }
+  #comboTag{
+    text-align:center; height:16px; font-size:12px; font-weight:800; color:#5eead4;
+  }
+
+  #boardWrap{
+    flex:1; min-height:0;
+    margin:4px 16px 18px;
+    background:rgba(0,0,0,0.18);
+    border-radius:18px;
+    padding:12px;
+    display:grid;
+    grid-template-columns:repeat(4, 1fr);
+    grid-auto-rows:1fr;
+    gap:8px;
+  }
+  .capsule{
+    position:relative;
+    border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    background:linear-gradient(160deg, var(--capsule1), var(--capsule2) 55%, #ffb648 55%);
+    box-shadow:inset 0 -4px 6px rgba(0,0,0,0.15), inset 0 3px 4px rgba(255,255,255,0.7), 0 3px 6px rgba(0,0,0,0.3);
+    font-size:20px; font-weight:900; color:#5a3a00;
+    cursor:pointer;
+    transition:transform .12s ease, box-shadow .12s ease;
+  }
+  .capsule.selected{
+    transform:scale(1.08);
+    box-shadow:0 0 0 3px #5eead4, 0 4px 10px rgba(0,0,0,0.4);
+  }
+  .capsule.correct{
+    animation:pop .35s ease forwards;
+  }
+  .capsule.wrong{
+    animation:shake .35s ease;
+  }
+  .capsule.empty{
+    background:rgba(255,255,255,0.04);
+    box-shadow:none;
+    cursor:default;
+  }
+  @keyframes pop{
+    0%{ transform:scale(1.08); opacity:1; }
+    60%{ transform:scale(1.35); opacity:0.6; }
+    100%{ transform:scale(0.2); opacity:0; }
+  }
+  @keyframes shake{
+    0%,100%{ transform:translateX(0); }
+    20%{ transform:translateX(-6px); }
+    40%{ transform:translateX(6px); }
+    60%{ transform:translateX(-4px); }
+    80%{ transform:translateX(4px); }
+  }
+
+  /* short-viewport compaction (iframe 480~560px tall) */
+  .compact h1.title{ font-size:19px; }
+  .compact p.sub{ font-size:12px; margin-bottom:10px; }
+  .compact .howto{ font-size:11.5px; padding:10px 12px; margin-bottom:10px; }
+  .compact .btn{ padding:11px 26px; font-size:15px; }
+  .compact .logo-duck{ font-size:38px; margin-bottom:2px; }
+  .compact .score-big{ font-size:32px; }
+  .compact #hud{ padding:8px 12px 4px; }
+  .compact #targetArea{ margin:0 12px 6px; padding:6px 10px 8px; }
+  .compact #targetNum{ font-size:20px; padding:1px 10px; }
+  .compact #boardWrap{ margin:2px 12px 10px; gap:6px; padding:8px; }
+  .compact .capsule{ font-size:16px; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="game-wrapper">
+
+    <!-- START SCREEN -->
+    <div id="screen-start" class="screen overlay">
+      <div>
+        <div class="logo-duck">🦆</div>
+        <h1 class="title">오리 뽑기 자판기 합체</h1>
+        <p class="sub">캡슐 두 개를 골라 목표 숫자를 만드세요!</p>
+      </div>
+      <div class="howto" id="howtoStart">
+        <b>방법</b><br>
+        위에 뜨는 <b>목표 숫자</b>와 합이 같아지는 캡슐 <b>두 개</b>를 순서대로 탭하세요.<br>
+        맞히면 캡슐이 터지고 점수 획득, 틀리면 하트가 줄어요.<br>
+        시간 안에 못 맞혀도 하트가 줄어듭니다. 하트 3개를 모두 잃으면 종료!<br>
+        <b>PC</b>: 마우스 클릭 또는 숫자키 1~9<br>
+        <b>모바일</b>: 캡슐을 손가락으로 톡톡
+      </div>
+      <div>
+        <button class="btn" id="startBtn">시작하기</button>
+      </div>
+    </div>
+
+    <!-- GAME SCREEN -->
+    <div id="screen-game" class="screen hidden">
+      <div id="hud">
+        <div id="lives">❤️❤️❤️</div>
+        <div id="scoreWrap">
+          <div id="scoreVal">0</div>
+          <div class="scoreCap" id="scoreCap">SCORE</div>
+        </div>
+        <button id="muteBtn" aria-label="음소거">🔊</button>
+      </div>
+      <div id="targetArea">
+        <div id="targetRow">목표 합 <div id="targetNum">10</div></div>
+        <div id="timerBarOuter"><div id="timerBarInner"></div></div>
+      </div>
+      <div id="comboTag"></div>
+      <div id="boardWrap"></div>
+    </div>
+
+    <!-- GAME OVER SCREEN -->
+    <div id="screen-over" class="screen overlay hidden">
+      <div>
+        <div class="logo-duck">🦆</div>
+        <h1 class="title">게임 종료!</h1>
+      </div>
+      <div>
+        <div class="score-big" id="finalScore">0</div>
+        <div class="score-label">최종 점수</div>
+      </div>
+      <div class="best-row"><span>🏆 최고 점수</span><strong id="bestScoreVal">0</strong></div>
+      <div class="new-best hidden" id="newBestTag">✨ 신기록 달성! ✨</div>
+      <div>
+        <button class="btn" id="retryBtn">다시하기</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  var DESIGN_W = 400, DESIGN_H = 700;
+  var wrapper = document.getElementById('game-wrapper');
+  var stage = document.getElementById('stage');
+
+  function fitStage(){
+    var vh = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
+    var vw = (window.visualViewport && window.visualViewport.width) || window.innerWidth;
+    stage.style.height = vh + 'px';
+    var scale = Math.min(vw / DESIGN_W, vh / DESIGN_H);
+    scale = Math.max(scale, 0.3);
+    wrapper.style.transform = 'scale(' + scale + ')';
+
+    var compact = vh <= 560;
+    document.querySelectorAll('.overlay, #screen-game').forEach(function(el){
+      el.classList.toggle('compact', compact);
+    });
+  }
+  window.addEventListener('resize', fitStage);
+  window.addEventListener('orientationchange', fitStage);
+  if (window.visualViewport){
+    window.visualViewport.addEventListener('resize', fitStage);
+  }
+  fitStage();
+
+  /* ---------------- audio ---------------- */
+  var actx = null, muted = false;
+  function ensureCtx(){
+    if (!actx){
+      try{ actx = new (window.AudioContext || window.webkitAudioContext)(); }catch(e){ actx = null; }
+    }
+    return actx;
+  }
+  function beep(freq, dur, type, vol, delay){
+    if (muted) return;
+    var ctx = ensureCtx();
+    if (!ctx) return;
+    var t0 = ctx.currentTime + (delay||0);
+    var osc = ctx.createOscillator();
+    var gain = ctx.createGain();
+    osc.type = type || 'sine';
+    osc.frequency.setValueAtTime(freq, t0);
+    gain.gain.setValueAtTime(0, t0);
+    gain.gain.linearRampToValueAtTime(vol||0.18, t0+0.015);
+    gain.gain.exponentialRampToValueAtTime(0.001, t0+dur);
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.start(t0); osc.stop(t0+dur+0.02);
+  }
+  function sndSelect(){ beep(520,0.08,'triangle',0.14); }
+  function sndCorrect(){ beep(660,0.11,'square',0.16); beep(880,0.14,'square',0.14,0.08); beep(1180,0.16,'square',0.12,0.16); }
+  function sndWrong(){ beep(180,0.22,'sawtooth',0.16); }
+  function sndTimeout(){ beep(140,0.28,'sawtooth',0.16); }
+  function sndOver(){ beep(400,0.18,'sine',0.16); beep(300,0.22,'sine',0.14,0.16); beep(220,0.3,'sine',0.14,0.32); }
+  function sndStart(){ beep(500,0.1,'triangle',0.14); beep(760,0.14,'triangle',0.14,0.1); }
+
+  var muteBtn = document.getElementById('muteBtn');
+  muteBtn.addEventListener('click', function(){
+    muted = !muted;
+    muteBtn.textContent = muted ? '🔇' : '🔊';
+  });
+
+  /* ---------------- game state ---------------- */
+  var STORAGE_KEY = 'duck-capsule-combo-highscore';
+  var ROWS = 4, COLS = 4, CELLS = ROWS*COLS;
+  var board = [];          // array of {num, el, alive}
+  var selected = [];        // indices
+  var score = 0, lives = 3, combo = 0;
+  var target = 0;
+  var numMin = 1, numMax = 9;
+  var roundTime = 7000;     // ms per target, shrinks slightly with score
+  var roundStart = 0;
+  var rafId = null;
+  var running = false;
+  var busy = false; // lock input during animation
+
+  var boardWrap = document.getElementById('boardWrap');
+  var livesEl = document.getElementById('lives');
+  var scoreValEl = document.getElementById('scoreVal');
+  var targetNumEl = document.getElementById('targetNum');
+  var timerBarInner = document.getElementById('timerBarInner');
+  var comboTag = document.getElementById('comboTag');
+
+  function rand(min,max){ return Math.floor(Math.random()*(max-min+1))+min; }
+
+  function difficultyTune(){
+    if (score >= 1600){ numMin=1; numMax=16; roundTime=4600; }
+    else if (score >= 900){ numMin=1; numMax=14; roundTime=5200; }
+    else if (score >= 400){ numMin=1; numMax=12; roundTime=6000; }
+    else { numMin=1; numMax=9; roundTime=7000; }
+  }
+
+  function buildBoard(){
+    boardWrap.innerHTML = '';
+    board = [];
+    for (var i=0;i<CELLS;i++){
+      var v = rand(numMin, numMax);
+      var el = document.createElement('div');
+      el.className = 'capsule';
+      el.textContent = v;
+      el.dataset.idx = i;
+      el.addEventListener('click', onCapsuleClick);
+      boardWrap.appendChild(el);
+      board.push({num:v, el:el, alive:true});
+    }
+  }
+
+  function aliveIndices(){
+    var arr = [];
+    for (var i=0;i<board.length;i++){ if (board[i].alive) arr.push(i); }
+    return arr;
+  }
+
+  function pickNewTarget(){
+    var alive = aliveIndices();
+    if (alive.length < 2){ return null; }
+    var a = alive[rand(0, alive.length-1)];
+    var b;
+    do { b = alive[rand(0, alive.length-1)]; } while (b === a);
+    var t = board[a].num + board[b].num;
+    target = t;
+    targetNumEl.textContent = String(target);
+    roundStart = performance.now();
+    return true;
+  }
+
+  function refillCell(i){
+    var v = rand(numMin, numMax);
+    board[i].num = v;
+    board[i].alive = true;
+    var el = board[i].el;
+    el.textContent = v;
+    el.className = 'capsule';
+  }
+
+  function clearSelection(){
+    selected.forEach(function(i){
+      if (board[i] && board[i].el) board[i].el.classList.remove('selected');
+    });
+    selected = [];
+  }
+
+  function onCapsuleClick(e){
+    if (!running || busy) return;
+    var i = parseInt(e.currentTarget.dataset.idx, 10);
+    if (!board[i] || !board[i].alive) return;
+    if (selected.indexOf(i) !== -1) {
+      board[i].el.classList.remove('selected');
+      selected = selected.filter(function(x){ return x!==i; });
+      return;
+    }
+    sndSelect();
+    board[i].el.classList.add('selected');
+    selected.push(i);
+    if (selected.length === 2){
+      evaluatePair();
+    }
+  }
+
+  function evaluatePair(){
+    busy = true;
+    var i1 = selected[0], i2 = selected[1];
+    var sum = board[i1].num + board[i2].num;
+    if (sum === target){
+      sndCorrect();
+      score += 100 + combo*20;
+      combo += 1;
+      updateScore();
+      showCombo();
+      [i1,i2].forEach(function(i){ board[i].el.classList.add('correct'); board[i].alive = false; });
+      setTimeout(function(){
+        refillCell(i1); refillCell(i2);
+        clearSelection();
+        var ok = pickNewTarget();
+        busy = false;
+        if (!ok){ endGame(); }
+      }, 260);
+    } else {
+      sndWrong();
+      combo = 0;
+      comboTag.textContent = '';
+      [i1,i2].forEach(function(i){ board[i].el.classList.add('wrong'); });
+      loseLife();
+      setTimeout(function(){
+        [i1,i2].forEach(function(i){ if (board[i] && board[i].el) board[i].el.classList.remove('wrong'); });
+        clearSelection();
+        busy = false;
+      }, 340);
+    }
+  }
+
+  function showCombo(){
+    if (combo >= 2){
+      comboTag.textContent = combo + ' 콤보!';
+    } else {
+      comboTag.textContent = '';
+    }
+  }
+
+  function updateScore(){
+    scoreValEl.textContent = String(score);
+    difficultyTune();
+  }
+
+  function loseLife(){
+    lives -= 1;
+    renderLives();
+    if (lives <= 0){
+      setTimeout(endGame, 200);
+    }
+  }
+
+  function renderLives(){
+    var s = '';
+    for (var i=0;i<3;i++){ s += (i < lives) ? '❤️' : '🖤'; }
+    livesEl.textContent = s;
+  }
+
+  function loop(ts){
+    if (!running) return;
+    var elapsed = performance.now() - roundStart;
+    var pct = Math.max(0, 1 - elapsed / roundTime);
+    timerBarInner.style.width = (pct*100) + '%';
+    if (pct <= 0 && !busy){
+      busy = true;
+      sndTimeout();
+      combo = 0;
+      comboTag.textContent = '';
+      clearSelection();
+      loseLife();
+      if (lives > 0){
+        // reshuffle a couple cells to keep it fresh
+        var alive = aliveIndices();
+        for (var k=0;k<2 && alive.length>0;k++){
+          var idx = alive[rand(0, alive.length-1)];
+          refillCell(idx);
+        }
+        var ok = pickNewTarget();
+        busy = false;
+        if (!ok){ endGame(); }
+      }
+    }
+    rafId = requestAnimationFrame(loop);
+  }
+
+  function startGame(){
+    score = 0; lives = 3; combo = 0;
+    numMin=1; numMax=9; roundTime=7000;
+    updateScore();
+    renderLives();
+    comboTag.textContent = '';
+    buildBoard();
+    pickNewTarget();
+    running = true; busy = false;
+    show('screen-game');
+    sndStart();
+    if (rafId) cancelAnimationFrame(rafId);
+    rafId = requestAnimationFrame(loop);
+  }
+
+  function endGame(){
+    running = false;
+    if (rafId) cancelAnimationFrame(rafId);
+    sndOver();
+    var best = parseInt(localStorage.getItem(STORAGE_KEY) || '0', 10);
+    var isNew = score > best;
+    if (isNew){
+      try{ localStorage.setItem(STORAGE_KEY, String(score)); }catch(e){}
+      best = score;
+    }
+    document.getElementById('finalScore').textContent = String(score);
+    document.getElementById('bestScoreVal').textContent = String(best);
+    document.getElementById('newBestTag').classList.toggle('hidden', !isNew);
+    show('screen-over');
+  }
+
+  function show(id){
+    ['screen-start','screen-game','screen-over'].forEach(function(s){
+      document.getElementById(s).classList.toggle('hidden', s!==id);
+    });
+    fitStage();
+  }
+
+  document.getElementById('startBtn').addEventListener('click', function(){
+    ensureCtx();
+    startGame();
+  });
+  document.getElementById('retryBtn').addEventListener('click', function(){
+    ensureCtx();
+    startGame();
+  });
+
+  // keyboard support (PC): number keys select first matching alive capsule
+  document.addEventListener('keydown', function(e){
+    if (!running || busy) return;
+    if (e.key === 'Escape'){ clearSelection(); return; }
+    var n = parseInt(e.key, 10);
+    if (isNaN(n) || n < 1 || n > 9) return;
+    for (var i=0;i<board.length;i++){
+      if (board[i].alive && board[i].num === n && selected.indexOf(i) === -1){
+        board[i].el.dispatchEvent(new Event('click', {bubbles:true, cancelable:true}));
+        break;
+      }
+    }
+  });
+
+  // init high score display isn't needed on start screen, but keep board area sized
+  renderLives();
+})();
+</script>
+</body>
+</html>
