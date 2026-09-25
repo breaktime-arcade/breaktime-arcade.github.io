@@ -2,12 +2,12 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>햄스터 열기구 바람타기 - 쉬는시간 오락실</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
   html, body { height: 100%; background: #20304a; overflow: hidden; font-family: "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif; user-select: none; -webkit-user-select: none; touch-action: none; }
-  #wrap { position: relative; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
+  #wrap { position: fixed; left: 0; top: 0; width: 100%; height: 100%; height: 100dvh; display: flex; align-items: center; justify-content: center; padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
   #stage { position: relative; }
   canvas { display: block; width: 100%; height: 100%; border-radius: 14px; box-shadow: 0 8px 30px rgba(0,0,0,.35); }
   .topbtn { position: absolute; top: 10px; width: 38px; height: 38px; border-radius: 50%; border: none; background: rgba(255,255,255,.85); font-size: 18px; cursor: pointer; z-index: 5; box-shadow: 0 2px 6px rgba(0,0,0,.2); }
@@ -15,7 +15,9 @@
   #pauseBtn { right: 54px; }
   #sandBtn { position: absolute; right: 12px; bottom: 76px; width: 74px; height: 74px; border-radius: 50%; border: 3px solid #fff; background: #c98a4b; color: #fff; font-weight: 800; font-size: 13px; line-height: 1.15; z-index: 5; display: none; cursor: pointer; box-shadow: 0 3px 10px rgba(0,0,0,.3); }
   #sandBtn:disabled { opacity: .45; }
-  .overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; background: rgba(22,34,58,.82); color: #fff; border-radius: 14px; padding: 22px; z-index: 10; }
+  .overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; text-align: center; background: rgba(22,34,58,.82); color: #fff; border-radius: 14px; padding: 18px 16px; z-index: 10; overflow-y: auto; -webkit-overflow-scrolling: touch; touch-action: pan-y; }
+  .overlay > :first-child { margin-top: auto; }
+  .overlay > :last-child { margin-bottom: auto; }
   .overlay.hidden { display: none; }
   .overlay h1 { font-size: 30px; margin-bottom: 6px; color: #ffe08a; text-shadow: 0 3px 0 #b5642a; }
   .overlay h2 { font-size: 26px; margin-bottom: 10px; color: #ffe08a; }
@@ -28,6 +30,18 @@
   .big { font-size: 40px; font-weight: 900; color: #fff; margin: 4px 0; }
   .hidden { display: none !important; }
   .newbest { color: #ffdf5d; font-weight: 800; margin-bottom: 4px; }
+  @media (max-height: 720px) {
+    .overlay h1 { font-size: 24px; }
+    .overlay p { font-size: 13px; }
+    .guide { font-size: 12px; line-height: 1.5; margin: 10px 0; padding: 10px 12px; }
+    .btn { padding: 11px 30px; font-size: 16px; margin-top: 6px; }
+    .best { margin-top: 6px; }
+  }
+  @media (max-height: 560px) {
+    .overlay h1 { font-size: 20px; }
+    .guide { font-size: 11px; line-height: 1.4; }
+    #sandBtn { width: 60px; height: 60px; font-size: 11px; bottom: 60px; }
+  }
 </style>
 </head>
 <body>
@@ -84,8 +98,14 @@
   // ---------- 화면 크기 ----------
   let dpr = 1;
   function resize() {
-    const vw = window.innerWidth, vh = window.innerHeight;
-    const scale = Math.min(vw / W, vh / H);
+    const vv = window.visualViewport;
+    const wrap = document.getElementById('wrap');
+    const vh0 = vv ? vv.height : window.innerHeight;
+    wrap.style.height = vh0 + 'px';
+    const cs = getComputedStyle(wrap);
+    const vw = wrap.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - 8;
+    const vh = wrap.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom) - 8;
+    const scale = Math.max(0.1, Math.min(vw / W, vh / H));
     const cw = Math.floor(W * scale), ch = Math.floor(H * scale);
     stage.style.width = cw + 'px'; stage.style.height = ch + 'px';
     dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -93,6 +113,8 @@
     ctx.setTransform(cv.width / W, 0, 0, cv.height / H, 0, 0);
   }
   window.addEventListener('resize', resize);
+  window.addEventListener('orientationchange', () => setTimeout(resize, 200));
+  if (window.visualViewport) window.visualViewport.addEventListener('resize', resize);
   resize();
 
   // ---------- 저장 ----------
