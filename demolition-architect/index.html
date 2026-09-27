@@ -34,7 +34,7 @@
   .howto{text-align:left;background:rgba(255,255,255,.05);border-radius:14px;padding:11px 13px;font-size:13.2px;line-height:1.75;margin-bottom:12px;color:#e9e3d6}
   .howto b{color:#ffb43c}
   .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
-  .lv{border:none;border-radius:12px;padding:10px 4px 8px;background:linear-gradient(160deg,#ffb43c,#d77a12);color:#1a1d24;font-weight:900;font-size:16px;cursor:pointer;box-shadow:0 4px 0 #8a4a05}
+  .lv{border:none;border-radius:12px;padding:9px 3px 7px;line-height:1.25;word-break:keep-all;background:linear-gradient(160deg,#ffb43c,#d77a12);color:#1a1d24;font-weight:900;font-size:13.5px;cursor:pointer;box-shadow:0 4px 0 #8a4a05}
   .lv small{display:block;font-size:11px;margin-top:2px}
   .lv.locked{filter:grayscale(1);opacity:.4;pointer-events:none}
   .big{border:none;border-radius:14px;padding:12px 18px;font-weight:900;font-size:15px;color:#1a1d24;cursor:pointer;background:linear-gradient(160deg,#ffb43c,#d77a12);box-shadow:0 4px 0 #8a4a05;margin:4px}
@@ -230,7 +230,34 @@ const LEVELS = [
     goal:'고층 타워를 동쪽 좁은 영역에 정확히! 남북 건물 주의' },
   { name:'복합 빌딩', nx:3, nz:2, S:6, bombs:6, hits:3,
     zone:{x1:-8, x2:8, z1:0, z2:26}, houses:[{x:-13,z:4,w:4,d:8,h:5},{x:13,z:4,w:4,d:8,h:5},{x:0,z:-11,w:10,d:3,h:4}],
-    goal:'남쪽(화면 앞, +Z) 영역으로! 동·서·북 모두 보호 건물' }
+    goal:'남쪽(화면 앞, +Z) 영역으로! 동·서·북 모두 보호 건물' },
+  { name:'좁은 골목', nx:2, nz:2, S:5, bombs:5, hits:2,
+    zone:{x1:-2, x2:21, z1:-2, z2:21}, houses:[{x:16,z:-8,w:6,d:5,h:5},{x:-8,z:16,w:5,d:6,h:5},{x:-12,z:-12,w:5,d:5,h:4}],
+    goal:'양옆이 막힌 골목! 남동쪽(↘) 대각선으로 눕히세요' },
+  { name:'12층 슬림 타워', nx:1, nz:2, S:12, bombs:5, hits:2,
+    zone:{x1:0, x2:44, z1:-7, z2:7}, houses:[{x:10,z:-12.5,w:8,d:4,h:5},{x:10,z:12.5,w:8,d:4,h:5},{x:-10,z:0,w:4,d:6,h:4}],
+    goal:'38m 초고층! 동쪽 멀리 뻗은 좁은 영역에 눕히세요' },
+  { name:'제자리 붕괴', nx:2, nz:2, S:6, bombs:6, hits:2,
+    zone:{x1:-7, x2:7, z1:-7, z2:7}, houses:[{x:11.5,z:0,w:4,d:8,h:6},{x:-11.5,z:0,w:4,d:8,h:6},{x:0,z:11.5,w:8,d:4,h:6},{x:0,z:-11.5,w:8,d:4,h:6}],
+    goal:'사방이 건물! 기울이지 말고 제자리에 수직으로 주저앉히세요' },
+  { name:'폭약 절약', nx:2, nz:2, S:6, bombs:2, hits:1,
+    zone:{x1:-1, x2:24, z1:-8, z2:8}, houses:[{x:-11,z:0,w:4,d:6,h:4},{x:3,z:-13,w:6,d:4,h:4}],
+    goal:'폭약은 단 2개! 하중 분석으로 연쇄 붕괴를 노려 동쪽으로' },
+  { name:'L자 빌딩', buildings:[{nx:3, nz:3, S:5, omit:[[1,0],[2,0],[1,1],[2,1]]}], bombs:6, hits:3,
+    zone:{x1:-3, x2:18, z1:-18, z2:3}, houses:[{x:-13,z:0,w:4,d:8,h:5},{x:0,z:13,w:8,d:4,h:5},{x:-13,z:-14,w:5,d:5,h:4}],
+    goal:'비대칭 L자 건물을 북동쪽(↗) 빈터로 넘어뜨리세요' },
+  { name:'쌍둥이 빌딩', buildings:[{nx:1, nz:1, S:7, ox:0, oz:-5.5},{nx:1, nz:1, S:7, ox:0, oz:5.5}], bombs:5, hits:2,
+    zones:[{x1:-6, x2:6, z1:-28, z2:-2.4},{x1:-6, x2:6, z1:2.4, z2:28}], houses:[{x:0,z:0,w:6,d:1.6,h:3},{x:-12,z:0,w:4,d:10,h:5},{x:12,z:0,w:4,d:10,h:5}],
+    goal:'두 타워를 서로 반대(북·남)로! 사이의 작은 관리동을 지키세요' },
+  { name:'약한 지반', nx:2, nz:2, S:7, bombs:5, hits:2,
+    zone:{x1:0, x2:30, z1:-5, z2:5}, houses:[{x:12,z:-11,w:8,d:4,h:5},{x:12,z:11,w:8,d:4,h:5},{x:-11,z:0,w:4,d:8,h:4}],
+    goal:'좁고 먼 동쪽 영역! 방향이 조금만 틀어져도 실패해요' },
+  { name:'도심 한복판', nx:3, nz:2, S:6, bombs:6, hits:3,
+    zone:{x1:-30, x2:0, z1:-5, z2:5}, houses:[{x:-8,z:-10,w:8,d:4,h:5},{x:-21,z:-10,w:6,d:4,h:5},{x:-8,z:10,w:8,d:4,h:5},{x:-21,z:10,w:6,d:4,h:5},{x:13,z:0,w:4,d:8,h:5},{x:-35,z:0,w:4,d:8,h:4}],
+    goal:'보호 건물 6채! 서쪽(←) 좁은 길을 따라 눕히세요' },
+  { name:'최종 현장', buildings:[{nx:3, nz:3, S:5, ox:-4, oz:0, omit:[[1,0],[2,0],[1,1],[2,1]]},{nx:1, nz:1, S:5, ox:10, oz:7}], bombs:8, hits:3,
+    zones:[{x1:-7, x2:5, z1:-20, z2:2.5},{x1:6, x2:14, z1:5, z2:27}], houses:[{x:-17,z:0,w:4,d:10,h:5},{x:-4,z:13,w:8,d:4,h:5},{x:20,z:7,w:4,d:6,h:5},{x:10,z:-8,w:6,d:4,h:4}],
+    goal:'L자 빌딩은 북쪽(↑) 빈터로, 타워는 남쪽(↓)으로! 종합 문제' },
 ];
 
 // =========================================================
@@ -346,7 +373,7 @@ const SFX={
 // =========================================================
 //  상태
 // =========================================================
-let rw=null, eq=null, structBody=null, lv=null, lvIdx=0, state='title';
+let blds=[], zones=[], rw=null, eq=null, structBody=null, lv=null, lvIdx=0, state='title';
 let elements=[], compounds=[], frags=[], houses=[], bombs=[], zoneMesh=null, templates=null;
 let bombsLeft=0, hitsLeft=0, tool='bomb', analysis=false, fireT=-1, settleT=0, simT=0, shake=0, fragCount=0, houseHit=false;
 const colliderMap = new Map();   // collider handle → {el} | {frag} | {house}
@@ -378,23 +405,30 @@ function buildLevel(i){
   colliderMap.set(gc.handle, {ground:true});
   // 구조물 (정적 상태: 하나의 고정 바디에 모든 부재 콜라이더)
   structBody = rw.createRigidBody(R.RigidBodyDesc.fixed());
-  const x0 = -lv.nx*B/2, z0 = -lv.nz*B/2;
-  for(let k=0;k<lv.S;k++){
-    for(let a=0;a<=lv.nx;a++) for(let b=0;b<=lv.nz;b++){
-      addElement('col', k, x0+a*B, k*HS+HC/2, z0+b*B, [CW,HC,CW]);
+  blds = lv.buildings || [{nx:lv.nx, nz:lv.nz, S:lv.S, ox:0, oz:0}];
+  blds.forEach((bd,bi)=>{
+    const om = new Set((bd.omit||[]).map(p=>p[0]+','+p[1]));
+    const has = (a,b)=> a>=0 && b>=0 && a<bd.nx && b<bd.nz && !om.has(a+','+b);   // 빈 칸(omit) → L자 등 비정형 평면
+    const x0 = (bd.ox||0)-bd.nx*B/2, z0 = (bd.oz||0)-bd.nz*B/2;
+    for(let k=0;k<bd.S;k++){
+      for(let a=0;a<=bd.nx;a++) for(let b=0;b<=bd.nz;b++){
+        if(has(a-1,b-1)||has(a,b-1)||has(a-1,b)||has(a,b)) addElement('col', k, x0+a*B, k*HS+HC/2, z0+b*B, [CW,HC,CW], bi);
+      }
+      for(let a=0;a<bd.nx;a++) for(let b=0;b<bd.nz;b++){
+        if(has(a,b)) addElement('slab', k, x0+(a+.5)*B, (k+1)*HS-ST/2, z0+(b+.5)*B, [B-0.02,ST,B-0.02], bi);
+      }
     }
-    for(let a=0;a<lv.nx;a++) for(let b=0;b<lv.nz;b++){
-      addElement('slab', k, x0+(a+.5)*B, (k+1)*HS-ST/2, z0+(b+.5)*B, [B-0.02,ST,B-0.02]);
-    }
-  }
+  });
   // 설계 하중 → 기둥 용량
   analyze(true);
   // 안전 영역
-  const Z=lv.zone;
-  zoneMesh = new THREE.Mesh(new THREE.PlaneGeometry(Z.x2-Z.x1, Z.z2-Z.z1), new THREE.MeshBasicMaterial({color:0x3ad16f, transparent:true, opacity:.28, depthWrite:false}));
-  zoneMesh.rotation.x=-Math.PI/2; zoneMesh.position.set((Z.x1+Z.x2)/2, 0.02, (Z.z1+Z.z2)/2); worldGroup.add(zoneMesh);
-  const edge = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(Z.x2-Z.x1, 0.01, Z.z2-Z.z1)), new THREE.LineBasicMaterial({color:0x3ad16f}));
-  edge.position.set((Z.x1+Z.x2)/2, 0.04, (Z.z1+Z.z2)/2); worldGroup.add(edge);
+  zones = lv.zones || [lv.zone];
+  for(const Z of zones){
+    zoneMesh = new THREE.Mesh(new THREE.PlaneGeometry(Z.x2-Z.x1, Z.z2-Z.z1), new THREE.MeshBasicMaterial({color:0x3ad16f, transparent:true, opacity:.28, depthWrite:false}));
+    zoneMesh.rotation.x=-Math.PI/2; zoneMesh.position.set((Z.x1+Z.x2)/2, 0.02, (Z.z1+Z.z2)/2); worldGroup.add(zoneMesh);
+    const edge = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(Z.x2-Z.x1, 0.01, Z.z2-Z.z1)), new THREE.LineBasicMaterial({color:0x3ad16f}));
+    edge.position.set((Z.x1+Z.x2)/2, 0.04, (Z.z1+Z.z2)/2); worldGroup.add(edge);
+  }
   // 보호 건물
   for(const h of lv.houses){
     const m = new THREE.Mesh(new THREE.BoxGeometry(h.w,h.h,h.d), matHouse); m.position.set(h.x,h.h/2,h.z); m.castShadow=m.receiveShadow=true; worldGroup.add(m);
@@ -405,7 +439,10 @@ function buildLevel(i){
   }
   bombsLeft=lv.bombs; hitsLeft=lv.hits; tool='bomb'; fireT=-1; settleT=0; simT=0; houseHit=false; fragCount=0;
   state='plan';
-  camTarget.set(0, lv.S*HS*0.4, 0); camDist = Math.max(30, lv.S*HS*1.9) * (camera.aspect<1 ? 1.45 : 1); camYaw = 1.2; camPitch = 0.38;
+  const maxS = Math.max(...blds.map(b=>b.S)); let bcx=0, bcz=0, ext=0;
+  for(const b of blds){ bcx+=(b.ox||0)/blds.length; bcz+=(b.oz||0)/blds.length; }
+  for(const b of blds) ext=Math.max(ext, Math.hypot((b.ox||0)-bcx,(b.oz||0)-bcz)+Math.max(b.nx,b.nz)*B/2);
+  camTarget.set(bcx, maxS*HS*0.4, bcz); camDist = Math.max(30, maxS*HS*1.9, ext*3.2) * (camera.aspect<1 ? 1.45 : 1); camYaw = 1.2; camPitch = 0.38;
   document.getElementById('hud').style.display='flex';
   document.getElementById('bar').style.display='flex';
   document.getElementById('tEval').style.display='none';
@@ -415,12 +452,12 @@ function buildLevel(i){
   showPanel(null); updateToolUI();
   toast(`LEVEL ${i+1} · ${lv.name}<br><span style="font-size:14px;color:#ffe2b0">${lv.goal}</span>`, 2600);
 }
-function addElement(kind, storey, x, y, z, size){
+function addElement(kind, storey, x, y, z, size, bld=0){
   const mesh = new THREE.Mesh(kind==='col'?colGeo:slabGeo, kind==='col'?matCol.clone():matSlab);
   mesh.position.set(x,y,z); mesh.castShadow=mesh.receiveShadow=true; worldGroup.add(mesh);
   const col = rw.createCollider(R.ColliderDesc.cuboid(size[0]/2,size[1]/2,size[2]/2).setTranslation(x,y,z).setFriction(0.8), structBody);
   const vol=size[0]*size[1]*size[2];
-  const el = {id:elements.length, kind, storey, pos:new THREE.Vector3(x,y,z), size, mass:vol*DENS, vol, state:'static', mesh, collider:col, cap:0, load:0, crushT:-1, comp:null, local:null};
+  const el = {id:elements.length, kind, storey, bld, pos:new THREE.Vector3(x,y,z), size, mass:vol*DENS, vol, state:'static', mesh, collider:col, cap:0, load:0, crushT:-1, comp:null, local:null};
   mesh.userData.el = el;
   colliderMap.set(col.handle, {el});
   elements.push(el);
@@ -431,9 +468,9 @@ function addElement(kind, storey, x, y, z, size){
 // =========================================================
 function analyze(initial=false){
   if(!lv) return;
-  for(let k=0;k<lv.S;k++){
-    const cols = elements.filter(e=>e.state==='static' && e.kind==='col' && e.storey===k);
-    const above = elements.filter(e=>e.state==='static' && ((e.kind==='col' && e.storey>k) || (e.kind==='slab' && e.storey>=k)));
+  for(let bi=0;bi<blds.length;bi++) for(let k=0;k<blds[bi].S;k++){
+    const cols = elements.filter(e=>e.bld===bi && e.state==='static' && e.kind==='col' && e.storey===k);
+    const above = elements.filter(e=>e.bld===bi && e.state==='static' && ((e.kind==='col' && e.storey>k) || (e.kind==='slab' && e.storey>=k)));
     if(!above.length) continue;
     let M=0, cx=0, cz=0; for(const e of above){ M+=e.mass; cx+=e.pos.x*e.mass; cz+=e.pos.z*e.mass; } cx/=M; cz/=M;
     const W = M*G;
@@ -469,9 +506,9 @@ function analyze(initial=false){
 function predictLoads(){
   const ex = new Set(bombs.map(b=>b.el));
   const res = new Map(); let tip=null;
-  for(let k=0;k<lv.S;k++){
-    const cols = elements.filter(e=>e.state==='static' && e.kind==='col' && e.storey===k && !ex.has(e));
-    const above = elements.filter(e=>e.state==='static' && ((e.kind==='col' && e.storey>k) || (e.kind==='slab' && e.storey>=k)));
+  for(let bi=0;bi<blds.length;bi++) for(let k=0;k<blds[bi].S;k++){
+    const cols = elements.filter(e=>e.bld===bi && e.state==='static' && e.kind==='col' && e.storey===k && !ex.has(e));
+    const above = elements.filter(e=>e.bld===bi && e.state==='static' && ((e.kind==='col' && e.storey>k) || (e.kind==='slab' && e.storey>=k)));
     if(!above.length) continue;
     let M=0,cx=0,cz=0; for(const e of above){ M+=e.mass; cx+=e.pos.x*e.mass; cz+=e.pos.z*e.mass; } cx/=M; cz/=M;
     if(!cols.length){ tip = tip || {k, cx, cz, dir:null}; continue; }
@@ -683,7 +720,7 @@ function goTitle(){
   LEVELS.forEach((L,i)=>{
     const un=i===0||saved[i-1]; const n=saved[i]||0;
     const b=document.createElement('button'); b.className='lv'+(un?'':' locked');
-    b.innerHTML=`${un?'':'🔒 '}${L.name}<small>${'★'.repeat(n)}${'☆'.repeat(3-n)}</small>`;
+    b.innerHTML=`${un?'':'🔒 '}${i+1}. ${L.name}<small>${'★'.repeat(n)}${'☆'.repeat(3-n)}</small>`;
     b.onclick=()=>{ initAudio(); buildLevel(i); };
     g.appendChild(b);
   });
@@ -692,12 +729,9 @@ function goTitle(){
 // =========================================================
 //  평가
 // =========================================================
-function evaluate(){
-  if(state!=='run') return;
-  state='done';
+function calcStats(){
   let total=0, inZone=0, maxTop=0;
-  const Z=lv.zone;
-  const count=(x,z,vol)=>{ total+=vol; if(x>Z.x1 && x<Z.x2 && z>Z.z1 && z<Z.z2) inZone+=vol; };
+  const count=(x,z,vol)=>{ total+=vol; if(zones.some(Z=>x>Z.x1 && x<Z.x2 && z>Z.z1 && z<Z.z2)) inZone+=vol; };
   for(const e of elements){
     if(e.state==='broken') continue;
     const W=elementWorld(e); count(W.p.x, W.p.z, e.vol);
@@ -707,7 +741,12 @@ function evaluate(){
   for(const f of frags){ const t=f.body.translation(); count(t.x,t.z,f.vol); hs.push(t.y); }
   hs.sort((a,b)=>a-b); if(hs.length) maxTop=Math.max(maxTop, hs[Math.floor(hs.length*0.97)]);
   const pct = total>0 ? inZone/total*100 : 0;
-  const leveled = maxTop < HS*1.6;
+  return {pct, leveled: maxTop < HS*1.6, maxTop};
+}
+function evaluate(){
+  if(state!=='run') return;
+  state='done';
+  const {pct, leveled, maxTop} = calcStats();
   const win = leveled && !houseHit && pct >= 55;
   const stars = !win ? 0 : 1 + (pct>=70?1:0) + (pct>=85?1:0);
   if(win){ saved[lvIdx]=Math.max(saved[lvIdx]||0,stars); save(); SFX.win(); } else SFX.fail();
@@ -817,16 +856,17 @@ function colorAnalysis(){
   }
 }
 const tipArrow = new THREE.ArrowHelper(new THREE.Vector3(1,0,0), new THREE.Vector3(), 8, 0xffb43c, 2.2, 1.4); tipArrow.visible=false; scene.add(tipArrow);
+function fireBombsDue(){ for(const b of bombs.slice()){ if(b.delay<=fireT) detonate(b); } }
 function loop(now){
   let dt=(now-last)/1000; last=now; if(dt>0.1) dt=0.1;
   if(state==='run' || state==='plan' || state==='done'){
     // 기폭 시퀀스
     if(state==='run' && fireT>=0){
       const prev=fireT; fireT+=dt;
-      for(const b of bombs.slice()){ if(b.delay<=fireT) detonate(b); }
+      fireBombsDue();
       if(Math.floor(prev*4)!==Math.floor(fireT*4) && bombs.length) SFX.beep();
     }
-    if(state!=='title'){
+    if(state!=='title' && !window.__paused){
       acc += dt; let n=0;
       while(acc >= 1/60 && n<3){ stepPhysics(); acc -= 1/60; n++; }
       if(n>=3) acc=0;
@@ -860,7 +900,7 @@ templates = await runFracture([
 document.getElementById('loading').remove();
 goTitle();
 requestAnimationFrame(loop);
-window.__da = { buildLevel, get elements(){return elements;}, placeBomb, fire, get state(){return state;}, get frags(){return frags;}, evaluate, hitElement, get compounds(){return compounds;}, get houseHit(){return houseHit;}, setTool(t){tool=t;} };
+window.__da = { sim(sec){ for(let i=0;i<Math.round(sec*60);i++){ if(state==='run'&&fireT>=0){ fireT+=1/60; fireBombsDue(); } stepPhysics(); } syncMeshes(); }, calcStats, get houseHit(){return houseHit;}, get hitsLeft(){return hitsLeft;}, get bombsLeft(){return bombsLeft;}, LEVELS, pause(p){ window.__paused=p; }, buildLevel, get elements(){return elements;}, placeBomb, fire, get state(){return state;}, get frags(){return frags;}, evaluate, hitElement, get compounds(){return compounds;}, setTool(t){tool=t;} };
 })();
 </script>
 </body>
