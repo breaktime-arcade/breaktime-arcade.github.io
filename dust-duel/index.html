@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>먼지 대작전 | 쉬는시간 오락실</title>
+<meta name="description" content="큰 청소기 vs 세 갈래 청소기! 30초 동안 먼지를 더 많이 빨아들이는 쪽이 이기는 청소 대결 웹게임">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Jua&display=swap" rel="stylesheet">
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #fde6cf; }
+  body { touch-action: none; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; overscroll-behavior: none; }
+  #game { display: block; position: fixed; inset: 0; }
+  noscript { position: fixed; inset: 0; display: grid; place-items: center; font: 18px sans-serif; color: #5a3a24; }
+</style>
+</head>
+<body>
+<canvas id="game" aria-label="먼지 대작전 게임 화면"></canvas>
+<noscript>이 게임은 자바스크립트가 필요합니다.</noscript>
+<script src="dust-duel.js"></script>
+</body>
+</html>
