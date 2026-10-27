@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>탁! 알까기</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Jua&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #4a2e14;
+    --cream: #fff8ea;
+    --wood: #e7b064;
+    --accent: #ff8a3d;
+    --accent-d: #d9661f;
+    --mint: #8fd3c8;
+    --mint-d: #5fb3a6;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none; }
+  html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: none; }
+  body {
+    font-family: 'Jua', system-ui, sans-serif;
+    color: var(--ink);
+    background: radial-gradient(120% 90% at 50% 20%, #c9efe7 0%, var(--mint) 55%, var(--mint-d) 100%);
+    user-select: none; -webkit-user-select: none;
+  }
+  #app { position: relative; height: 100vh; height: 100dvh; display: flex; flex-direction: column; max-width: 760px; margin: 0 auto;
+    padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px); }
+
+  /* 상단 HUD */
+  #hud { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 12px 4px; }
+  .side { display: flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 99px; background: rgba(255,255,255,.55); font-size: 20px; min-width: 72px; transition: .2s; }
+  #hudWhite { justify-content: flex-end; }
+  .side.on { background: var(--cream); box-shadow: 0 3px 0 rgba(74,46,20,.25), 0 0 0 3px #ffd640; transform: translateY(-1px); }
+  #turn { display: flex; align-items: center; gap: 6px; font-size: 20px; padding: 5px 14px; border-radius: 99px; background: var(--cream); box-shadow: 0 3px 0 rgba(74,46,20,.2); white-space: nowrap; }
+  .dot { width: 18px; height: 18px; border-radius: 50%; display: inline-block; flex: none; }
+  .dot.black { background: radial-gradient(circle at 35% 30%, #777 0, #222 45%, #000 100%); }
+  .dot.white { background: radial-gradient(circle at 35% 30%, #fff 0, #f1eee6 55%, #c8c2b2 100%); box-shadow: inset 0 0 0 1px rgba(0,0,0,.2); }
+
+  /* 판 */
+  #stage { position: relative; flex: 1; min-height: 0; }
+  #cv { position: absolute; inset: 0; touch-action: none; display: block; }
+  #toast {
+    position: absolute; left: 50%; top: 46%; transform: translate(-50%,-50%) scale(.6);
+    padding: 10px 20px; border-radius: 16px; background: var(--cream); font-size: 22px; white-space: nowrap;
+    box-shadow: 0 4px 0 rgba(74,46,20,.25); opacity: 0; pointer-events: none;
+  }
+  #toast.pop { animation: pop 1.6s ease forwards; }
+  @keyframes pop {
+    0% { opacity: 0; transform: translate(-50%,-50%) scale(.6); }
+    12% { opacity: 1; transform: translate(-50%,-50%) scale(1.08); }
+    20% { transform: translate(-50%,-50%) scale(1); }
+    80% { opacity: 1; transform: translate(-50%,-50%) scale(1); }
+    100% { opacity: 0; transform: translate(-50%,-60%) scale(.95); }
+  }
+
+  /* 하단 힘 게이지 */
+  #bar { display: flex; align-items: center; gap: 8px; padding: 6px 12px 12px; }
+  #gauge { position: relative; flex: 1; height: 38px; border-radius: 99px; background: rgba(255,255,255,.6); overflow: hidden; box-shadow: inset 0 2px 4px rgba(0,0,0,.12); }
+  #gauge.fine { box-shadow: inset 0 2px 4px rgba(0,0,0,.12), 0 0 0 3px #6c8cff; }
+  #gaugeFill { position: absolute; inset: 0; background: linear-gradient(90deg, #4cd16b 0%, #f6d43b 55%, #ff5a3c 100%); clip-path: inset(0 100% 0 0); transition: clip-path .05s linear; }
+  #gauge::after { content: ''; position: absolute; inset: 0; pointer-events: none;
+    background: repeating-linear-gradient(90deg, transparent 0 calc(10% - 1px), rgba(74,46,20,.18) calc(10% - 1px) 10%); }
+  #gaugeText { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 17px; text-shadow: 0 1px 0 rgba(255,255,255,.7); white-space: nowrap; overflow: hidden; padding: 0 10px; }
+  button { font-family: inherit; color: var(--ink); cursor: pointer; border: 0; }
+  .chip, .icon { height: 38px; border-radius: 99px; background: var(--cream); box-shadow: 0 3px 0 rgba(74,46,20,.25); font-size: 16px; flex: none; }
+  .chip { padding: 0 12px; }
+  .chip.on { background: #6c8cff; color: #fff; }
+  .icon { width: 38px; font-size: 20px; }
+  .chip:active, .icon:active, .btn:active { transform: translateY(2px); box-shadow: 0 1px 0 rgba(74,46,20,.25); }
+
+  /* 오버레이 */
+  .overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(60,110,100,.35); backdrop-filter: blur(3px); z-index: 5; }
+  .hidden { display: none !important; }
+  .card { width: 100%; max-width: 360px; max-height: 100%; overflow-y: auto; background: var(--cream); border-radius: 26px; padding: 22px 20px 18px; box-shadow: 0 8px 0 rgba(74,46,20,.25), 0 16px 40px rgba(0,0,0,.2); text-align: center; }
+  .logo { display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 4px; }
+  .logo .dot { width: 34px; height: 34px; }
+  .logo .dot.white { transform: translateY(-8px) rotate(10deg); }
+  h1 { margin: 0; font-size: 40px; font-weight: 400; letter-spacing: 1px; }
+  h1 em { font-style: normal; color: var(--accent); }
+  .sub { margin: 2px 0 16px; font-size: 15px; opacity: .7; }
+  .btn { display: block; width: 100%; padding: 13px; margin: 0 0 10px; border-radius: 16px; font-size: 21px; background: var(--accent); color: #fff; box-shadow: 0 4px 0 var(--accent-d); }
+  .btn.ghost { background: #efe2c8; color: var(--ink); box-shadow: 0 4px 0 #cdb791; }
+  .btn:disabled { opacity: .45; cursor: default; }
+  .btn small { font-size: 14px; opacity: .85; }
+  .opt { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 10px 0; font-size: 16px; }
+  .seg { display: flex; background: #efe2c8; border-radius: 12px; padding: 3px; }
+  .seg button { background: transparent; padding: 6px 11px; border-radius: 9px; font-size: 15px; }
+  .seg button.sel { background: #fff; box-shadow: 0 2px 0 rgba(74,46,20,.2); }
+  .lbl { font-size: 13px; opacity: .65; }
+  .optbox { margin: 4px 0 8px; padding: 2px 10px; border-radius: 14px; background: #fbf1dd; border: 2px dashed #ecd6ae; }
+  .optbox .seg button { padding: 6px 8px; }
+  .themebox { margin: 10px 0 4px; text-align: left; }
+  .themehead { font-size: 16px; margin-bottom: 6px; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+  #themeDesc { font-size: 13px; opacity: .65; }
+  .seg.themes { flex-wrap: wrap; gap: 4px; padding: 5px; }
+  .seg.themes button { display: flex; align-items: center; gap: 5px; padding: 6px 9px 6px 6px; font-size: 14px; }
+  .seg.themes i { width: 16px; height: 16px; border-radius: 50%; flex: none; box-shadow: inset 0 0 0 1px rgba(0,0,0,.15); }
+  .howto { margin-top: 12px; padding: 10px 12px; border-radius: 14px; background: #f6ecd8; font-size: 14px; line-height: 1.55; text-align: left; }
+  .howto b { font-weight: 400; color: var(--accent-d); }
+  .bigstone { width: 64px; height: 64px; border-radius: 50%; margin: 0 auto 8px; }
+  .bigstone.black { background: radial-gradient(circle at 35% 30%, #777 0, #222 45%, #000 100%); }
+  .bigstone.white { background: radial-gradient(circle at 35% 30%, #fff 0, #f1eee6 55%, #c8c2b2 100%); box-shadow: inset 0 0 0 1px rgba(0,0,0,.15); }
+  .bigstone.draw { background: linear-gradient(90deg, #111 50%, #f1eee6 50%); }
+  #resultTitle { font-size: 36px; margin: 0; font-weight: 400; }
+  #resultSub { margin: 6px 0 4px; opacity: .75; }
+  #resultStats { margin: 0 0 16px; font-size: 14px; opacity: .6; }
+  .hint { font-size: 12px; opacity: .55; margin-right: auto; margin-left: 4px; }
+  .btn.small { font-size: 16px; padding: 10px; margin-top: 8px; }
+  #confetti { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+  #confetti i { position: absolute; top: -16px; width: 9px; height: 14px; border-radius: 2px; animation: drop linear forwards; }
+  @keyframes drop {
+    0% { transform: translate(0, 0) rotate(0); opacity: 1; }
+    100% { transform: translate(var(--rx), 110vh) rotate(720deg); opacity: .9; }
+  }
+  .card { position: relative; }
+  #result .card { animation: card-in .35s cubic-bezier(.2,1.4,.4,1); }
+  @keyframes card-in { from { transform: scale(.8); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+  /* 가로 화면·낮은 화면 */
+  @media (max-height: 520px) {
+    #hud { padding: 4px 10px 0; }
+    .side, #turn { font-size: 15px; padding: 3px 10px; }
+    .dot { width: 14px; height: 14px; }
+    #bar { padding: 4px 10px 6px; }
+    #gauge, .chip, .icon { height: 32px; }
+    .icon { width: 32px; font-size: 17px; }
+    #gaugeText { font-size: 14px; }
+    .card { padding: 14px 16px; }
+    h1 { font-size: 30px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #toast.pop { animation-duration: .01s; opacity: 1; }
+    #result .card { animation: none; }
+  }
+
+  @media (max-width: 420px) {
+    .side, #turn { font-size: 17px; }
+    .side { min-width: 60px; padding: 4px 10px; }
+    #gaugeText { font-size: 15px; }
+    .chip { font-size: 14px; padding: 0 10px; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <header id="hud">
+    <div class="side" id="hudBlack"><span class="dot black"></span><small id="lblBlack" class="lbl">나</small><b id="cntBlack">5</b></div>
+    <div id="turn"><span id="turnDot" class="dot black"></span><span id="turnText">흑 차례</span></div>
+    <div class="side" id="hudWhite"><b id="cntWhite">5</b><small id="lblWhite" class="lbl">AI</small><span class="dot white"></span></div>
+  </header>
+
+  <div id="stage"><canvas id="cv"></canvas><div id="toast"></div></div>
+
+  <footer id="bar">
+    <button id="btnFine" class="chip">정밀 꺼짐</button>
+    <div id="gauge"><div id="gaugeFill"></div><span id="gaugeText"></span></div>
+    <button id="btnRestart" class="icon" title="다시 시작">↺</button>
+    <button id="btnMenu" class="icon" title="메뉴">☰</button>
+  </footer>
+
+  <div id="menu" class="overlay">
+    <div class="card">
+      <div class="logo"><span class="dot black"></span><span class="dot white"></span></div>
+      <h1><em>탁!</em> 알까기</h1>
+      <p class="sub">튕겨서 상대 알을 모두 떨어뜨리세요</p>
+      <button class="btn" id="btnAi">AI 대결</button>
+      <button class="btn ghost" id="btnPvp">2인 대결 <small>· 한 기기로</small></button>
+
+      <div class="optbox">
+        <div class="opt">AI 수준
+          <div class="seg" data-opt="level">
+            <button data-v="1">입문</button><button data-v="2">초급</button><button data-v="3" class="sel">중급</button><button data-v="4">고수</button><button data-v="5">달인</button>
+          </div>
+        </div>
+        <div class="opt">먼저 쏘기
+          <div class="seg" data-opt="first">
+            <button data-v="me" class="sel">나</button><button data-v="ai">AI</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="themebox">
+        <div class="themehead">판 테마 <span id="themeDesc"></span></div>
+        <div class="seg themes" data-opt="theme" id="themePick"></div>
+      </div>
+
+      <div class="opt">알 개수
+        <div class="seg" data-opt="count">
+          <button data-v="5" class="sel">5</button><button data-v="6">6</button><button data-v="7">7</button><button data-v="8">8</button>
+        </div>
+      </div>
+      <div class="opt">맞히면 한 번 더
+        <div class="seg" data-opt="bonus">
+          <button data-v="0" class="sel">끄기</button><button data-v="1">켜기</button>
+        </div>
+      </div>
+      <div class="opt">예상 궤적선
+        <div class="seg" data-opt="guide">
+          <button data-v="1" class="sel">켜기</button><button data-v="0">끄기</button>
+        </div>
+      </div>
+      <div class="opt">효과음
+        <div class="seg" data-opt="sound">
+          <button data-v="1" class="sel">켜기</button><button data-v="0">끄기</button>
+        </div>
+      </div>
+      <div class="opt">진동 <small class="hint">안드로이드</small>
+        <div class="seg" data-opt="vibe">
+          <button data-v="1" class="sel">켜기</button><button data-v="0">끄기</button>
+        </div>
+      </div>
+      <button class="btn ghost small" id="btnFull" hidden>전체 화면으로 하기</button>
+
+      <div class="howto">
+        <b>쏘기</b> 내 알을 누르고 뒤로 당겼다 놓기. 한 번 고른 알은 화면 어디서 당겨도 돼요.<br>
+        <b>정밀 조정</b> PC는 Shift를 누른 채, 모바일은 다른 손가락으로 화면을 누른 채 당기면 4배 섬세해져요. 아래 '정밀' 버튼으로 고정할 수도 있어요.<br>
+        <b>취소</b> 시작점 근처로 되돌려 놓기 (PC는 Esc·우클릭)
+      </div>
+    </div>
+  </div>
+
+  <div id="result" class="overlay hidden">
+    <div id="confetti" aria-hidden="true"></div>
+    <div class="card">
+      <div id="resultStone" class="bigstone black"></div>
+      <h2 id="resultTitle">흑 승리!</h2>
+      <p id="resultSub"></p>
+      <p id="resultStats"></p>
+      <button class="btn" id="btnAgain">한 판 더</button>
+      <button class="btn ghost" id="btnToMenu">메뉴로</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/themes.js"></script>
+<script src="js/physics.js"></script>
+<script src="js/input.js"></script>
+<script src="js/ai.js"></script>
+<script src="js/game.js"></script>
+</body>
+</html>
