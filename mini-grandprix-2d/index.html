@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>미니카 그랑프리 2D</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Jua&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #2b2d42;
+    --paper: #fffdf6;
+    --pink: #ff4f6d;
+    --yellow: #ffd23f;
+    --mint: #3ddc97;
+    --sky: #4cc9f0;
+    --orange: #ff8a2a;
+    --shadow: 0 4px 0 rgba(43,45,66,.25);
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #9fd8ff; }
+  body { font-family: 'Jua', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif; color: var(--ink); user-select: none; -webkit-user-select: none; touch-action: none; }
+  #game { position: fixed; inset: 0; display: block; width: 100%; height: 100%; }
+  [hidden] { display: none !important; }
+
+  /* ---------- HUD ---------- */
+  .hud { position: fixed; pointer-events: none; z-index: 5; }
+  .card { background: var(--paper); border: 3px solid var(--ink); border-radius: 16px; box-shadow: var(--shadow); }
+  #hud-race { top: 12px; left: 12px; padding: 8px 14px; min-width: 160px; }
+  #hud-race .rank { font-size: 40px; line-height: 1; color: var(--pink); -webkit-text-stroke: 1px var(--ink); paint-order: stroke fill; }
+  #hud-race .rank small { font-size: 18px; color: var(--ink); -webkit-text-stroke: 0; }
+  #hud-race .row { display: flex; justify-content: space-between; gap: 14px; font-size: 15px; line-height: 1.5; font-variant-numeric: tabular-nums; }
+  #hud-race .label { opacity: .65; }
+  #minimap { position: fixed; left: 12px; top: 178px; width: 150px; height: 150px; z-index: 5; pointer-events: none; }
+
+  #hud-speed { right: 14px; bottom: 14px; width: 128px; height: 128px; border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  #hud-speed .num { font-size: 40px; line-height: 1; font-variant-numeric: tabular-nums; }
+  #hud-speed .unit { font-size: 13px; opacity: .6; }
+  #speed-ring { position: absolute; inset: 6px; }
+
+  #hud-boost { right: 152px; bottom: 22px; width: 180px; padding: 6px 10px 8px; }
+  #hud-boost .top { display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 4px; }
+  #hud-boost .bar { height: 16px; border: 2.5px solid var(--ink); border-radius: 10px; overflow: hidden; background: #ece7da; }
+  #boost-fill { height: 100%; width: 0%; background: linear-gradient(90deg, var(--yellow), var(--orange)); }
+  #hud-boost.ready { animation: pulse .6s ease-in-out infinite alternate; }
+  #hud-boost.ready #boost-fill { background: linear-gradient(90deg, var(--orange), var(--pink)); }
+  #hud-boost.active #boost-fill { background: linear-gradient(90deg, #6ff, var(--sky)); }
+  @keyframes pulse { from { transform: scale(1); } to { transform: scale(1.06); } }
+
+  #hud-msg { top: 26%; left: 50%; transform: translate(-50%, -50%); font-size: 46px; color: #fff; -webkit-text-stroke: 2px var(--ink); paint-order: stroke fill; text-shadow: 0 5px 0 var(--ink); opacity: 0; transition: opacity .25s, transform .25s; white-space: nowrap; }
+  #hud-msg.show { opacity: 1; transform: translate(-50%, -50%) scale(1.06); }
+  #countdown { top: 42%; left: 50%; transform: translate(-50%, -50%); font-size: 120px; color: var(--yellow); -webkit-text-stroke: 4px var(--ink); paint-order: stroke fill; text-shadow: 0 8px 0 var(--ink); }
+  #countdown.pop { animation: pop .5s ease-out; }
+  @keyframes pop { from { transform: translate(-50%, -50%) scale(1.8); opacity: .2; } to { transform: translate(-50%, -50%) scale(1); opacity: 1; } }
+  #hud-drift { top: 12px; left: 50%; transform: translateX(-50%); padding: 6px 16px; font-size: 18px; background: var(--yellow); opacity: 0; transition: opacity .2s; }
+  #hud-drift.show { opacity: 1; }
+  #hud-help { left: 12px; bottom: 12px; padding: 8px 12px; font-size: 13px; line-height: 1.6; opacity: .92; }
+  #hud-help b { display: inline-block; min-width: 22px; padding: 0 5px; margin-right: 3px; border: 2px solid var(--ink); border-radius: 6px; background: #fff; text-align: center; font-weight: normal; font-size: 12px; line-height: 16px; }
+
+  /* ---------- 버튼 ---------- */
+  #topbar { position: fixed; top: 12px; right: 12px; display: flex; gap: 8px; z-index: 6; }
+  .btn { font-family: inherit; font-size: 15px; color: var(--ink); background: var(--paper); border: 3px solid var(--ink); border-radius: 12px; padding: 6px 12px; box-shadow: var(--shadow); cursor: pointer; transition: transform .08s; }
+  .btn:active { transform: translateY(3px); box-shadow: 0 1px 0 rgba(43,45,66,.25); }
+  .btn:focus-visible, .pick:focus-visible { outline: 3px solid var(--sky); outline-offset: 2px; }
+  .btn.on { background: var(--yellow); }
+
+  /* ---------- 메뉴 / 결과 ---------- */
+  .overlay { position: fixed; inset: 0; z-index: 20; display: flex; align-items: flex-start; justify-content: center; overflow-y: auto; padding: 24px 16px; background: rgba(76, 201, 240, .38); backdrop-filter: blur(3px); }
+  .panel { width: min(620px, 100%); padding: 20px 22px 22px; margin: auto 0; }
+  .panel h1 { margin: 0; text-align: center; font-size: 44px; font-weight: normal; color: var(--pink); -webkit-text-stroke: 1.5px var(--ink); paint-order: stroke fill; text-shadow: 0 4px 0 var(--ink); letter-spacing: 1px; }
+  .panel .sub { margin: 4px 0 14px; text-align: center; font-size: 16px; opacity: .7; }
+  .sec-title { font-size: 17px; margin: 14px 0 8px; }
+  .picks { display: grid; gap: 8px; }
+  .picks.c2 { grid-template-columns: repeat(2, 1fr); }
+  .picks.c3 { grid-template-columns: repeat(3, 1fr); }
+  .picks.c4 { grid-template-columns: repeat(4, 1fr); }
+  .pick { font-family: inherit; color: var(--ink); text-align: left; background: #fff; border: 3px solid var(--ink); border-radius: 14px; padding: 8px 10px; cursor: pointer; box-shadow: 0 3px 0 rgba(43,45,66,.2); min-width: 0; }
+  .pick .nm { font-size: 17px; display: flex; align-items: center; gap: 6px; }
+  .pick .ds { font-size: 12px; opacity: .65; margin-top: 2px; line-height: 1.35; }
+  .pick.sel { background: var(--yellow); transform: translateY(-2px); box-shadow: 0 5px 0 rgba(43,45,66,.3); }
+  .pick.center { text-align: center; }
+  .swatch { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--ink); flex: none; }
+  .stats { margin-top: 6px; display: grid; grid-template-columns: auto 1fr; gap: 2px 6px; font-size: 11px; align-items: center; }
+  .stats i { display: block; height: 6px; border-radius: 4px; background: var(--pink); }
+  .best { font-size: 12px; margin-top: 3px; opacity: .8; font-variant-numeric: tabular-nums; }
+  .go-row { display: flex; justify-content: center; margin-top: 18px; }
+  .start { font-size: 26px; padding: 10px 46px; background: var(--mint); border-radius: 18px; }
+  .keys-line { text-align: center; font-size: 13px; opacity: .7; margin-top: 12px; line-height: 1.6; }
+
+  #results table { width: 100%; border-collapse: collapse; font-size: 18px; margin-top: 8px; font-variant-numeric: tabular-nums; }
+  #results td { padding: 7px 8px; border-bottom: 2px dashed rgba(43,45,66,.2); }
+  #results td:last-child { text-align: right; }
+  #results tr.me td { background: rgba(255,210,63,.45); }
+  #results .medal { font-size: 22px; width: 40px; }
+  .btn-row { display: flex; gap: 10px; justify-content: center; margin-top: 18px; flex-wrap: wrap; }
+
+  /* ---------- 튜닝 패널 ---------- */
+  #tuner { position: fixed; top: 64px; right: 12px; z-index: 7; width: 250px; padding: 12px 14px; }
+  #tuner h3 { margin: 0 0 8px; font-weight: normal; font-size: 18px; }
+  #tuner label { display: block; font-size: 13px; margin-top: 8px; }
+  #tuner label span { float: right; opacity: .7; }
+  #tuner input[type=range] { width: 100%; accent-color: var(--pink); }
+  #tuner .btn { margin-top: 10px; width: 100%; font-size: 14px; }
+
+  /* ---------- 터치 버튼 ---------- */
+  #touch { display: none; }
+  .touch-on #touch { display: block; }
+  .touch-on #hud-help { display: none; }
+  .tbtn { position: fixed; z-index: 8; width: 74px; height: 74px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 18px; background: rgba(255,253,246,.85); border: 3px solid var(--ink); box-shadow: var(--shadow); touch-action: none; }
+  .tbtn.down { background: var(--yellow); transform: translateY(3px); }
+  #t-left { left: 14px; bottom: 28px; }
+  #t-right { left: 100px; bottom: 28px; }
+  #t-gas { right: 14px; bottom: 28px; width: 92px; height: 92px; font-size: 20px; background: rgba(61,220,151,.92); }
+  #t-brake { right: 118px; bottom: 22px; width: 70px; height: 70px; font-size: 16px; }
+  #t-drift { right: 22px; bottom: 134px; font-size: 15px; background: rgba(255,210,63,.92); }
+  #t-boost { right: 106px; bottom: 112px; width: 64px; height: 64px; font-size: 14px; background: rgba(255,138,42,.92); }
+  .touch-on #hud-speed { right: auto; left: 50%; top: 6px; bottom: auto; width: 96px; height: 96px; transform: translateX(-50%); }
+  .touch-on #hud-speed .num { font-size: 30px; }
+  .touch-on #hud-drift { top: 108px; }
+  .touch-on #hud-boost { right: auto; left: 50%; transform: translateX(-50%); bottom: auto; top: 108px; width: 112px; padding: 4px 8px 6px; }
+  .touch-on #hud-boost .top { font-size: 12px; }
+  .touch-on #hud-boost.ready { animation: none; }
+  .touch-on #hud-drift { top: 160px; }
+
+  @media (max-width: 640px) {
+    #topbar { flex-direction: column; align-items: flex-end; gap: 6px; }
+    #tuner { top: auto; bottom: 140px; right: 10px; max-height: 50vh; overflow-y: auto; }
+    #hud-msg { white-space: normal; word-break: keep-all; width: 90vw; text-align: center; top: 38%; font-size: 34px; }
+    #hud-race { padding: 6px 10px; min-width: 112px; }
+    #hud-race .rank { font-size: 30px; }
+    #hud-race .row { font-size: 13px; }
+    #minimap { width: 110px; height: 110px; top: 148px; }
+    .btn { font-size: 13px; padding: 5px 8px; }
+    .panel h1 { font-size: 34px; }
+    .picks.c4 { grid-template-columns: repeat(2, 1fr); }
+    #countdown { font-size: 90px; }
+  }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<!-- 순위 / 바퀴 -->
+<div id="hud-race" class="hud card">
+  <div class="rank" id="hud-rank">1<small>/5등</small></div>
+  <div class="row"><span class="label">바퀴</span><span id="hud-lap">0/3</span></div>
+  <div class="row"><span class="label">시간</span><span id="hud-time">0.00</span></div>
+  <div class="row" id="row-last"><span class="label">지난 바퀴</span><span id="hud-last">-</span></div>
+  <div class="row"><span class="label">최고 기록</span><span id="hud-best">-</span></div>
+</div>
+<canvas id="minimap" width="300" height="300"></canvas>
+
+<div id="hud-drift" class="hud card">드리프트!</div>
+<div id="hud-msg" class="hud"></div>
+<div id="countdown" class="hud" hidden></div>
+
+<!-- 부스터 게이지 -->
+<div id="hud-boost" class="hud card">
+  <div class="top"><span id="boost-label">부스터</span><span id="boost-key">Shift</span></div>
+  <div class="bar"><div id="boost-fill"></div></div>
+</div>
+
+<!-- 속도계 -->
+<div id="hud-speed" class="hud card">
+  <svg id="speed-ring" viewBox="0 0 100 100">
+    <circle cx="50" cy="50" r="44" fill="none" stroke="#2b2d42" stroke-opacity=".12" stroke-width="7"
+            stroke-dasharray="207 300" transform="rotate(135 50 50)" stroke-linecap="round"/>
+    <circle id="speed-arc" cx="50" cy="50" r="44" fill="none" stroke="#ff4f6d" stroke-width="7"
+            stroke-dasharray="0 300" transform="rotate(135 50 50)" stroke-linecap="round"/>
+  </svg>
+  <div class="num" id="speed-num">0</div>
+  <div class="unit">km/h</div>
+</div>
+
+<div id="hud-help" class="hud card">
+  <b>↑</b>가속 <b>↓</b>브레이크 <b>← →</b>조향 <b>스페이스</b>드리프트<br>
+  <b>Shift</b>부스터 <b>R</b>제자리 복귀 <b>C</b>시점 <b>Esc</b>메뉴
+</div>
+
+<div id="topbar">
+  <button class="btn" id="btn-cam">시점</button>
+  <button class="btn" id="btn-tune">튜닝</button>
+  <button class="btn" id="btn-sound">소리 켬</button>
+  <button class="btn" id="btn-menu">메뉴</button>
+</div>
+
+<!-- 튜닝 패널 -->
+<div id="tuner" class="card" hidden>
+  <h3>🔧 주행감 튜닝</h3>
+  <div id="tuner-sliders"></div>
+  <button class="btn" id="btn-reset-tune">이 차의 기본값으로</button>
+</div>
+
+<!-- 터치 버튼 -->
+<div id="touch">
+  <div class="tbtn" id="t-left">◀</div>
+  <div class="tbtn" id="t-right">▶</div>
+  <div class="tbtn" id="t-gas">가속</div>
+  <div class="tbtn" id="t-brake">브레이크</div>
+  <div class="tbtn" id="t-drift">드리프트</div>
+  <div class="tbtn" id="t-boost">부스터</div>
+</div>
+
+<!-- 메뉴 -->
+<div id="menu" class="overlay">
+  <div class="panel card">
+    <h1>미니카 그랑프리</h1>
+    <div class="sub">위에서 내려다보는 2D 탑뷰 레이스</div>
+
+    <div class="sec-title">어떻게 달릴까요?</div>
+    <div class="picks c2" id="pick-mode"></div>
+
+    <div class="sec-title">트랙</div>
+    <div class="picks c4" id="pick-track"></div>
+
+    <div class="sec-title">내 자동차</div>
+    <div class="picks c4" id="pick-car"></div>
+
+    <div id="diff-wrap">
+      <div class="sec-title">상대 실력</div>
+      <div class="picks c3" id="pick-diff"></div>
+    </div>
+
+    <div class="go-row"><button class="btn start" id="btn-start">출발!</button></div>
+    <div class="keys-line" id="keys-line">↑ 가속 · ↓ 브레이크 · ← → 조향 · 스페이스 드리프트 · Shift 부스터</div>
+  </div>
+</div>
+
+<!-- 결과 -->
+<div id="results" class="overlay" hidden>
+  <div class="panel card">
+    <h1 id="res-title">결승선 통과!</h1>
+    <div class="sub" id="res-sub"></div>
+    <table id="res-table"></table>
+    <div class="btn-row">
+      <button class="btn start" id="btn-again">다시 달리기</button>
+      <button class="btn" id="btn-to-menu" style="font-size:20px">메뉴로</button>
+    </div>
+  </div>
+</div>
+
+<!-- 일반 스크립트라서 index.html을 더블클릭해도 실행됩니다 -->
+<script src="js/physics.js"></script>
+<script src="js/ai.js"></script>
+<script src="js/track.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/render.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
