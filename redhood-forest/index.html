@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>빨간망토 숲길 퍼즐</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; padding: 0; background: #cfeeb0; font-family: 'Pretendard', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif; color: #2f4a1f; }
+  #wrap { max-width: 460px; margin: 0 auto; padding: 10px 10px 16px; position: relative; user-select: none; -webkit-user-select: none; }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-bottom: 6px; }
+  h1 { font-size: 19px; margin: 0; color: #c0392b; letter-spacing: -0.5px; white-space: nowrap; }
+  .btns { display: flex; gap: 5px; }
+  .btns button { border: none; border-radius: 12px; padding: 7px 9px; font-size: 13px; font-weight: 700; background: #fff; color: #3d6b25; box-shadow: 0 2px 0 #8bbf63; cursor: pointer; }
+  .btns button:active { transform: translateY(2px); box-shadow: none; }
+  #hintBtn { background: #ffe27a; color: #7a5a00; box-shadow: 0 2px 0 #d4b13c; }
+  #info { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  #lvLabel { background: #c0392b; color: #fff; font-weight: 800; border-radius: 10px; padding: 3px 9px; font-size: 13px; white-space: nowrap; }
+  #mode { font-size: 13px; font-weight: 700; line-height: 1.35; }
+  #stage { position: relative; }
+  #board { width: 100%; aspect-ratio: 420 / 600; display: block; border-radius: 18px; touch-action: none; box-shadow: 0 4px 14px rgba(40, 80, 20, 0.25); }
+  #msg { text-align: center; font-weight: 800; font-size: 15px; min-height: 22px; margin-top: 8px; }
+  .ov { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(30, 50, 20, 0.55); border-radius: 18px; z-index: 5; padding: 14px; }
+  .ov.show { display: flex; }
+  .card { max-height: 100%; overflow-y: auto; background: #fffdf5; border-radius: 20px; padding: 18px 16px; width: 100%; max-width: 380px; text-align: center; box-shadow: 0 6px 0 #c9b48f; }
+  .card h2 { margin: 0 0 6px; color: #c0392b; font-size: 22px; }
+  .card p { margin: 6px 0; font-size: 14px; line-height: 1.5; }
+  #levelGrid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; margin: 10px 0 8px; }
+  .lvBtn { border: none; border-radius: 12px; padding: 6px 0 4px; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 1px; font-size: 18px; color: #2f4a1f; box-shadow: 0 3px 0 rgba(0, 0, 0, 0.18); }
+  .lvBtn b { font-size: 16px; }
+  .lvBtn .ic { font-size: 13px; }
+  .lvBtn .st { font-size: 7px; min-height: 10px; letter-spacing: -1px; }
+  .m-day { background: #fff3b0; } .m-flower { background: #ffd6e8; } .m-night { background: #c9d4ff; }
+  .lvBtn.big4 { box-shadow: 0 3px 0 rgba(0,0,0,0.18), inset 0 0 0 3px #5fa83a; }
+  .lvBtn.locked { opacity: 0.45; cursor: default; }
+  .big { border: none; border-radius: 14px; padding: 11px 18px; font-size: 16px; font-weight: 800; cursor: pointer; margin: 4px; }
+  .primary { background: #e0473f; color: #fff; box-shadow: 0 3px 0 #a52b24; }
+  .sub { background: #e8f3dc; color: #3d6b25; box-shadow: 0 3px 0 #a9cf8a; }
+  #clearStars { font-size: 36px; letter-spacing: 4px; margin: 6px 0; }
+  .rule { text-align: left; font-size: 14px; line-height: 1.6; margin: 8px 0 12px; padding-left: 18px; }
+  .linkBtn { background: none; border: none; color: #3d6b25; text-decoration: underline; font-size: 14px; cursor: pointer; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <header>
+    <h1>🍎 빨간망토 숲길</h1>
+    <div class="btns">
+      <button id="menuBtn">레벨</button>
+      <button id="hintBtn">힌트</button>
+      <button id="resetBtn">다시</button>
+      <button id="soundBtn">🔊</button>
+    </div>
+  </header>
+  <div id="info"><span id="lvLabel">레벨 1</span><span id="mode"></span></div>
+  <div id="stage">
+    <canvas id="board"></canvas>
+
+    <div class="ov" id="menuOv"><div class="card">
+      <h2>빨간망토 숲길 퍼즐</h2>
+      <p>길 조각을 이어서 빨간망토를 할머니 집에 데려다 주세요!</p>
+      <div id="levelGrid"></div>
+      <button class="linkBtn" id="helpBtn">게임 방법 보기</button>
+    </div></div>
+
+    <div class="ov" id="helpOv"><div class="card">
+      <h2>게임 방법</h2>
+      <ul class="rule">
+        <li>아래 <b>길 조각</b>을 끌어서 숲에 놓아요.</li>
+        <li>조각을 <b>탭</b>하면 90도씩 돌아가요.</li>
+        <li><b>나무</b> 칸에는 구멍 뚫린 조각만 놓을 수 있어요.</li>
+        <li>조각을 <b>모두</b> 놓고, 빨간망토부터 할머니 집까지 길이 이어지면 성공!</li>
+        <li>🌸 꽃길: 꽃을 모두 지나가야 해요.</li>
+        <li>🌙 밤: 늑대가 있는 칸은 지나가면 안 돼요.</li>
+        <li>🌲 25레벨부터는 4×4 <b>큰 숲</b>! 조각이 많아져요.</li>
+        <li>힌트를 안 쓰면 별 3개!</li>
+      </ul>
+      <button class="big primary" id="helpClose">알겠어요</button>
+    </div></div>
+
+    <div class="ov" id="clearOv"><div class="card">
+      <h2 id="clearTitle">할머니 집 도착! 🏠</h2>
+      <div id="clearStars">⭐⭐⭐</div>
+      <p id="clearSub"></p>
+      <button class="big sub" id="retryBtn">다시 하기</button>
+      <button class="big primary" id="nextBtn">다음 레벨 ▶</button>
+    </div></div>
+  </div>
+  <div id="msg"></div>
+</div>
+<script src="game.js"></script>
+</body>
+</html>
