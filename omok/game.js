@@ -348,7 +348,7 @@
     canvas.width = Math.round(L.w * L.dpr);
     canvas.height = Math.round(L.h * L.dpr);
     const pad = 10;
-    L.size = Math.floor(Math.min(L.w, L.h) - pad * 2);
+    L.size = Math.max(90, Math.floor(Math.min(L.w, L.h) - pad * 2));
     L.cell = L.size / N;
     L.ox = (L.w - L.size) / 2;
     L.oy = (L.h - L.size) / 2;
@@ -692,6 +692,7 @@
     }
   }
   function roundRect(x, y, w, h, rad) {
+    rad = Math.max(0, Math.min(rad, Math.abs(w) / 2, Math.abs(h) / 2));
     ctx.beginPath();
     ctx.moveTo(x + rad, y);
     ctx.arcTo(x + w, y, x + w, y + h, rad);
@@ -704,10 +705,11 @@
   function loop(t) {
     const dt = Math.min(0.1, (t - lastT) / 1000 || 0);
     lastT = t; clock += dt;
+    requestAnimationFrame(loop);              // 그리기 중 오류가 나도 다음 프레임은 계속
+    if (canvas.width < 2 || canvas.height < 2) layout();
     if (placeAnim) { placeAnim.t += dt; if (placeAnim.t > 0.3) placeAnim = null; }
     if (hint) { hint.t += dt; if (hint.t > 3) hint = null; }
-    render();
-    requestAnimationFrame(loop);
+    try { render(); } catch (e) { /* 다음 프레임에서 다시 그림 */ }
   }
  
   // ===== 버튼 =====
