@@ -1,93 +1,170 @@
-<div style="font-size:16px;line-height:1.8;color:#333;">
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>사과 게임 - 합 10 만들기 (Apple Ten)</title>
+<meta name="description" content="숫자 사과를 네모로 묶어 합 10을 만드는 무료 웹 퍼즐 게임. 2분 안에 사과를 최대한 많이 따 보세요!">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Jua&display=swap" rel="stylesheet">
+<style>
+:root{
+  --red:#e8413c; --red-d:#a92228; --green:#45a852; --green-d:#2c7a37;
+  --wood:#f1d39b; --wood-d:#b98247; --ink:#4a2e1e; --cream:#fff8ec;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+html,body{height:100%;overflow:hidden;}
+body{
+  font-family:'Jua','Apple SD Gothic Neo','Malgun Gothic','Noto Sans KR',sans-serif;
+  background:radial-gradient(circle at 30% 0%,#e6f7d2,#b4e196 55%,#8cc970);
+  color:var(--ink); user-select:none; -webkit-user-select:none; touch-action:manipulation; word-break:keep-all;
+}
+#app{position:fixed;inset:0;display:flex;flex-direction:column;}
 
-<p>쉬는 시간 2분, 머리 말랑하게 풀어 줄 게임 한 판 어떠세요? 🍎</p>
-<p>오늘 소개할 게임은 요즘 직장인과 학생들 사이에서 꾸준히 인기 있는 <b>사과 게임</b>이에요. 숫자가 적힌 사과들을 네모로 묶어서 합이 딱 10이 되면 사과를 따는 간단한 숫자 퍼즐이에요. 규칙은 10초면 배우지만, 2분 동안 사과를 최대한 많이 따려면 눈과 손이 바빠져요.</p>
-<p>설치나 회원가입 없이 이 글에서 바로 플레이할 수 있고, PC와 휴대폰 모두 지원해요.</p>
+/* 상단 정보줄 */
+#hud{flex:0 0 auto;display:flex;align-items:center;gap:8px;padding:8px 10px 4px;}
+.chip{
+  background:var(--cream);border:3px solid var(--wood-d);border-radius:14px;
+  padding:3px 12px;font-size:20px;display:flex;align-items:center;gap:4px;
+  box-shadow:0 3px 0 rgba(0,0,0,.15);white-space:nowrap;min-width:72px;justify-content:center;height:42px;
+}
+#timer{
+  flex:1;position:relative;height:30px;min-width:60px;background:var(--cream);
+  border:3px solid var(--wood-d);border-radius:15px;overflow:hidden;box-shadow:0 3px 0 rgba(0,0,0,.15);
+}
+#timerFill{position:absolute;left:0;top:0;bottom:0;width:100%;background:linear-gradient(#8fdc7a,#45a852);}
+#timer.danger #timerFill{background:linear-gradient(#ff9a8c,#e8413c);animation:blink .45s infinite alternate;}
+#timer.practice #timerFill{background:repeating-linear-gradient(45deg,#bfe8a8 0 12px,#a7dd8c 12px 24px);}
+#timerText{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:17px;text-shadow:0 1px 0 #fff;}
+@keyframes blink{from{opacity:1}to{opacity:.55}}
+.ibtn{
+  width:42px;height:42px;border-radius:12px;border:3px solid var(--wood-d);background:var(--cream);
+  font-size:19px;cursor:pointer;position:relative;box-shadow:0 3px 0 rgba(0,0,0,.15);flex:0 0 auto;
+  color:var(--ink);font-family:inherit;line-height:1;
+}
+.ibtn:active{transform:translateY(2px);box-shadow:0 1px 0 rgba(0,0,0,.15);}
+.ibtn:disabled{opacity:.45;cursor:default;}
+.badge{
+  position:absolute;top:-8px;right:-8px;background:var(--red);color:#fff;font-size:12px;
+  border-radius:10px;padding:2px 6px;border:2px solid #fff;line-height:1;
+}
 
-<div style="background:#fff8ec;border:2px solid #e8c48f;border-radius:14px;padding:14px 18px;margin:18px 0;">
-🎮 <b>게임 이름</b>: 사과 게임 (Apple Ten)<br>
-🧩 <b>장르</b>: 숫자 퍼즐<br>
-⏱️ <b>한 판</b>: 2분 (연습 모드는 무제한)<br>
-📱 <b>지원</b>: PC 마우스 · 휴대폰 터치
+/* 게임판 */
+#stage{flex:1;position:relative;min-height:0;}
+#board{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none;}
+
+/* 겹쳐 뜨는 화면 */
+.overlay{position:absolute;inset:0;display:none;align-items:center;justify-content:center;padding:14px;z-index:10;}
+.overlay.show{display:flex;}
+.dim{background:rgba(60,40,20,.38);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);z-index:20;}
+.solid{background:var(--wood);border-radius:14px;margin:6px;}
+.panel{
+  background:var(--cream);border:4px solid var(--wood-d);border-radius:26px;padding:22px 20px;
+  width:100%;max-width:360px;max-height:100%;overflow:auto;text-align:center;
+  box-shadow:0 8px 0 rgba(0,0,0,.18);animation:pop .25s ease-out;
+}
+@keyframes pop{from{transform:scale(.85);opacity:0}to{transform:scale(1);opacity:1}}
+.title{font-size:42px;color:var(--red);text-shadow:0 3px 0 #fff,0 5px 0 rgba(0,0,0,.12);line-height:1.1;}
+.sub{font-size:18px;margin:6px 0 14px;}
+.howto{
+  background:#fff;border:2px dashed var(--wood-d);border-radius:16px;padding:10px 12px;
+  font-size:15px;line-height:1.6;text-align:left;margin-bottom:14px;
+}
+.btn{
+  display:block;width:100%;border:none;border-radius:16px;padding:13px 10px;margin-top:10px;
+  font-family:inherit;font-size:21px;color:#fff;cursor:pointer;
+  background:var(--red);box-shadow:0 5px 0 var(--red-d);
+}
+.btn:active{transform:translateY(3px);box-shadow:0 2px 0 var(--red-d);}
+.btn.green{background:var(--green);box-shadow:0 5px 0 var(--green-d);}
+.btn.green:active{box-shadow:0 2px 0 var(--green-d);}
+.btn.plain{background:#e9d7b8;color:var(--ink);box-shadow:0 5px 0 #c4a77c;}
+.btn.plain:active{box-shadow:0 2px 0 #c4a77c;}
+.btn small{font-size:14px;opacity:.9;}
+.best{margin-top:14px;font-size:17px;}
+.row{display:flex;gap:8px;}
+.row .btn{flex:1;}
+
+#cdText{font-size:110px;color:#fff;text-shadow:0 6px 0 var(--red-d),0 0 30px rgba(0,0,0,.25);animation:pop .3s ease-out;}
+#cdOverlay{background:var(--wood);border-radius:14px;margin:6px;}
+
+/* 결과 */
+.resEmoji{font-size:70px;line-height:1.1;}
+.resGrade{font-size:32px;color:var(--red);}
+.resMsg{font-size:16px;margin:4px 0 12px;}
+.resReason{font-size:16px;color:#8a6a4a;margin-bottom:6px;}
+.scoreBox{display:flex;gap:8px;margin-bottom:6px;}
+.scoreBox div{flex:1;background:#fff;border:2px solid var(--wood-d);border-radius:14px;padding:8px 4px;}
+.scoreBox b{display:block;font-size:34px;font-weight:normal;color:var(--ink);}
+.scoreBox span{font-size:14px;color:#8a6a4a;}
+.newRec{
+  display:inline-block;background:#ffd84d;border-radius:12px;padding:4px 12px;font-size:17px;
+  margin:4px 0;animation:wiggle .6s infinite alternate;
+}
+@keyframes wiggle{from{transform:rotate(-4deg) scale(1)}to{transform:rotate(4deg) scale(1.08)}}
+.note{font-size:14px;color:#8a6a4a;margin-top:4px;}
+.hidden{display:none !important;}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="hud">
+    <div class="chip" aria-label="점수">🍎 <span id="score">0</span></div>
+    <div id="timer"><div id="timerFill"></div><div id="timerText">2:00</div></div>
+    <button class="ibtn" id="btnHint" aria-label="힌트">💡<span class="badge" id="hintBadge">3</span></button>
+    <button class="ibtn" id="btnPause" aria-label="일시정지" style="font-weight:bold">II</button>
+    <button class="ibtn" id="btnSound" aria-label="효과음 켜기/끄기">🔊</button>
+  </div>
+
+  <div id="stage">
+    <canvas id="board"></canvas>
+    <div class="overlay" id="cdOverlay"><div id="cdText">3</div></div>
+    <div class="overlay solid" id="pauseOverlay">
+      <div class="panel">
+        <div class="title" style="font-size:34px">잠깐 쉬는 중</div>
+        <p class="sub">사과판은 살짝 가려 둘게요 🙈</p>
+        <button class="btn green" id="btnResume">계속하기</button>
+        <button class="btn" id="btnRestart">다시 하기</button>
+        <button class="btn plain" id="btnToMenu">처음으로</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="overlay dim show" id="menu">
+    <div class="panel">
+      <div class="title">🍎 사과 게임</div>
+      <p class="sub">합이 10이 되게 사과를 묶어 따 보세요!</p>
+      <div class="howto">
+        ① 손가락이나 마우스로 <b>네모를 그려요</b><br>
+        ② 네모 안 숫자의 합이 <b>딱 10</b>이면 사과를 따요<br>
+        ③ 많이 묶을수록 점수가 쑥쑥! 빈칸은 0이에요
+      </div>
+      <button class="btn" id="btnNormal">기본 모드 <small>(2분)</small></button>
+      <button class="btn green" id="btnPractice">연습 모드 <small>(시간 무제한)</small></button>
+      <div class="best">🏆 내 최고 기록: <span id="menuBest">0</span>개</div>
+    </div>
+  </div>
+
+  <div class="overlay dim" id="result">
+    <div class="panel">
+      <div class="resReason" id="resReason">시간 끝!</div>
+      <div class="resEmoji" id="resEmoji">🍎</div>
+      <div class="resGrade" id="resGrade">사과 농부</div>
+      <div class="resMsg" id="resMsg"></div>
+      <div class="scoreBox">
+        <div><b id="resScore">0</b><span>이번 점수</span></div>
+        <div id="resBestBox"><b id="resBest">0</b><span>최고 기록</span></div>
+      </div>
+      <div class="newRec hidden" id="resNew">🎉 신기록!</div>
+      <div class="note" id="resNote"></div>
+      <div class="row">
+        <button class="btn" id="btnAgain">다시 하기</button>
+        <button class="btn plain" id="btnHome">처음으로</button>
+      </div>
+    </div>
+  </div>
 </div>
-
-<h2 style="font-size:22px;border-left:6px solid #e8413c;padding-left:10px;margin:28px 0 12px;">🕹️ 바로 플레이하기</h2>
-<iframe src="https://breaktime-arcade.github.io/apple-ten/" style="width:100%;height:min(85vh,700px);border:0;border-radius:12px;" title="사과 게임 Apple Ten"></iframe>
-<p style="text-align:center;margin-top:8px;"><a href="https://breaktime-arcade.github.io/apple-ten/" target="_blank" rel="noopener" style="display:inline-block;background:#e8413c;color:#fff;padding:10px 20px;border-radius:12px;text-decoration:none;font-weight:bold;">👉 새 창에서 크게 플레이하기</a></p>
-<p style="text-align:center;font-size:14px;color:#888;">※ 화면이 작거나 잘려 보이면 새 창으로 열어 주세요.</p>
-
-<h2 style="font-size:22px;border-left:6px solid #e8413c;padding-left:10px;margin:28px 0 12px;">🍎 사과 게임은 어떤 게임인가요?</h2>
-<p>나무 상자 안에 1부터 9까지 숫자가 적힌 사과 170개가 가득 놓여 있어요. 마우스나 손가락으로 네모를 그려 사과들을 묶고, 네모 안 숫자의 합이 정확히 <b>10</b>이 되면 사과가 톡 하고 날아가요. 딴 사과 하나가 1점이에요.</p>
-<p>예를 들어 3과 7을 묶으면 사과 2개, 2·3·5를 한 번에 묶으면 사과 3개를 딸 수 있어요. 한 번에 많이 묶을수록 점수가 빨리 올라가요.</p>
-
-<h2 style="font-size:22px;border-left:6px solid #e8413c;padding-left:10px;margin:28px 0 12px;">🎯 게임 방법</h2>
-<ol style="padding-left:22px;">
-<li>시작 화면에서 <b>기본 모드</b>나 <b>연습 모드</b>를 골라요.</li>
-<li>사과판 위에서 드래그해 네모를 그려요.</li>
-<li>드래그하는 동안 네모 옆에 합계가 표시돼요. 합이 10이면 <span style="color:#2c9a45;font-weight:bold;">초록색</span>, 10을 넘으면 <span style="color:#d33;font-weight:bold;">빨간색</span>으로 바뀌어요.</li>
-<li>손을 떼는 순간 합이 10이면 사과를 따요. 10이 아니면 네모가 흔들리고 아무 일도 일어나지 않아요(감점 없음).</li>
-<li>시간이 끝나거나, 더 이상 합 10을 만들 수 없으면 게임이 끝나요.</li>
-</ol>
-
-<h2 style="font-size:22px;border-left:6px solid #e8413c;padding-left:10px;margin:28px 0 12px;">🎮 조작 방법</h2>
-<table style="width:100%;border-collapse:collapse;text-align:center;">
-<thead><tr style="background:#fde3df;"><th style="border:1px solid #e8c48f;padding:8px;">기능</th><th style="border:1px solid #e8c48f;padding:8px;">PC</th><th style="border:1px solid #e8c48f;padding:8px;">휴대폰</th></tr></thead>
-<tbody>
-<tr><td style="border:1px solid #e8c48f;padding:8px;">사과 묶기</td><td style="border:1px solid #e8c48f;padding:8px;">마우스 드래그</td><td style="border:1px solid #e8c48f;padding:8px;">손가락 드래그</td></tr>
-<tr><td style="border:1px solid #e8c48f;padding:8px;">힌트</td><td style="border:1px solid #e8c48f;padding:8px;">💡 버튼 또는 H 키</td><td style="border:1px solid #e8c48f;padding:8px;">💡 버튼</td></tr>
-<tr><td style="border:1px solid #e8c48f;padding:8px;">일시정지</td><td style="border:1px solid #e8c48f;padding:8px;">II 버튼 또는 ESC 키</td><td style="border:1px solid #e8c48f;padding:8px;">II 버튼</td></tr>
-<tr><td style="border:1px solid #e8c48f;padding:8px;">효과음</td><td style="border:1px solid #e8c48f;padding:8px;">🔊 버튼</td><td style="border:1px solid #e8c48f;padding:8px;">🔊 버튼</td></tr>
-</tbody>
-</table>
-
-<h2 style="font-size:22px;border-left:6px solid #e8413c;padding-left:10px;margin:28px 0 12px;">🌱 두 가지 모드</h2>
-<ul style="padding-left:22px;">
-<li><b>기본 모드 (2분)</b>: 제한 시간 안에 최대한 많이 따는 모드예요. 최고 기록이 저장돼요.</li>
-<li><b>연습 모드 (무제한)</b>: 시간 걱정 없이 천천히 조합을 찾아보는 모드예요. 처음 해 보는 분께 추천해요. 기록은 저장되지 않아요.</li>
-</ul>
-
-<h2 style="font-size:22px;border-left:6px solid #e8413c;padding-left:10px;margin:28px 0 12px;">💡 편의 기능</h2>
-<ul style="padding-left:22px;">
-<li><b>힌트 3번</b>: 막힐 때 누르면 합 10이 되는 사과 묶음을 반짝 표시해 줘요.</li>
-<li><b>일시정지</b>: 일시정지 중에는 사과판을 가려서 미리 볼 수 없어요. 다른 탭으로 넘어가면 자동으로 멈춰요.</li>
-<li><b>화면 자동 맞춤</b>: PC에서는 가로로, 휴대폰 세로 화면에서는 판을 세워서 사과가 최대한 크게 보이게 해요.</li>
-</ul>
-
-<h2 style="font-size:22px;border-left:6px solid #e8413c;padding-left:10px;margin:28px 0 12px;">🏆 점수 등급</h2>
-<table style="width:100%;border-collapse:collapse;text-align:center;">
-<thead><tr style="background:#fde3df;"><th style="border:1px solid #e8c48f;padding:8px;">점수</th><th style="border:1px solid #e8c48f;padding:8px;">등급</th></tr></thead>
-<tbody>
-<tr><td style="border:1px solid #e8c48f;padding:8px;">0 ~ 49개</td><td style="border:1px solid #e8c48f;padding:8px;">🌱 새싹 농부</td></tr>
-<tr><td style="border:1px solid #e8c48f;padding:8px;">50 ~ 79개</td><td style="border:1px solid #e8c48f;padding:8px;">🍎 사과 농부</td></tr>
-<tr><td style="border:1px solid #e8c48f;padding:8px;">80 ~ 109개</td><td style="border:1px solid #e8c48f;padding:8px;">🧺 수확왕</td></tr>
-<tr><td style="border:1px solid #e8c48f;padding:8px;">110개 이상</td><td style="border:1px solid #e8c48f;padding:8px;">👑 사과 장인</td></tr>
-</tbody>
-</table>
-<p>여러분은 몇 등급까지 올라갈 수 있을지 도전해 보세요!</p>
-
-<h2 style="font-size:22px;border-left:6px solid #e8413c;padding-left:10px;margin:28px 0 12px;">🔥 고득점 꿀팁</h2>
-<ol style="padding-left:22px;">
-<li><b>빈칸은 0이에요.</b> 사과를 딴 자리는 빈칸이 되고 합계에 영향을 주지 않아요. 그래서 멀리 떨어진 사과끼리도 빈칸을 사이에 두고 한 번에 묶을 수 있어요.</li>
-<li><b>9와 1부터 챙기세요.</b> 9는 1하고만 짝이 돼서 나중에 남기 쉬워요. 보일 때 먼저 처리해 두는 게 좋아요.</li>
-<li><b>작은 숫자를 아껴 두세요.</b> 1·2·3·4처럼 작은 숫자 여러 개를 한 번에 묶으면 점수가 쑥 올라가요.</li>
-<li><b>한 구역씩 정리하세요.</b> 한쪽 구석부터 차근차근 지워 나가면 놓치는 조합이 줄어요.</li>
-</ol>
-
-<h2 style="font-size:22px;border-left:6px solid #e8413c;padding-left:10px;margin:28px 0 12px;">❓ 자주 묻는 질문</h2>
-<p><b>Q. 휴대폰에서도 되나요?</b><br>네, 손가락으로 드래그하면 돼요. 화면이 작으면 새 창으로 열어서 하는 걸 추천해요.</p>
-<p><b>Q. 소리가 안 나요.</b><br>화면을 한 번 터치하거나 클릭하면 소리가 켜져요. 오른쪽 위 버튼이 🔇로 되어 있는지도 확인해 주세요.</p>
-<p><b>Q. 최고 기록은 어디에 저장되나요?</b><br>지금 쓰는 브라우저에 저장돼요. 다른 기기나 시크릿 창에서는 기록이 따로 관리돼요.</p>
-<p><b>Q. 모든 사과를 다 딸 수 있나요?</b><br>판마다 달라요. 사과 전체의 합은 항상 10의 배수가 되도록 만들어지지만, 배치에 따라 마지막에 묶을 수 없는 사과가 남을 수도 있어요.</p>
-
-<h2 style="font-size:22px;border-left:6px solid #e8413c;padding-left:10px;margin:28px 0 12px;">🛠️ 제작 이야기</h2>
-<p>쉬는 시간마다 사과 게임 하는 분들이 많아서, 쉬는시간 오락실 버전으로 직접 만들어 봤어요. 가장 신경 쓴 부분은 휴대폰 세로 화면이었는데, 가로로 긴 사과판이 작게 보이지 않도록 화면 모양에 맞춰 판을 세우는 방식으로 해결했어요. 또 판마다 운이 너무 나쁘지 않도록 합 10 짝이 골고루 섞이게 숫자 배치를 조정했답니다.</p>
-
-<div style="background:#f3faee;border:2px dashed #8cc970;border-radius:14px;padding:14px 18px;margin:24px 0;">
-<b>🧩 이런 게임도 있어요</b><br>
-👉 <a href="https://smile-willow.tistory.com/entry/%EB%B9%A8%EA%B0%84%EB%A7%9D%ED%86%A0-%EC%88%B2%EA%B8%B8-%ED%8D%BC%EC%A6%90-%E2%80%93-%EA%B8%B8-%EC%A1%B0%EA%B0%81%EC%9D%84-%EC%9D%B4%EC%96%B4-%ED%95%A0%EB%A8%B8%EB%8B%88-%EC%A7%91%EA%B9%8C%EC%A7%80-Red-Hood-Forest-Path">빨간망토 숲길 퍼즐 – 길 조각을 이어 할머니 집까지!</a><br>
-👉 <a href="https://smile-willow.tistory.com/entry/alkkagi">탁! 알까기 – AI 대결·2인용 알까기 게임</a>
-</div>
-
-<p>쉬는 시간마다 한 판씩, 새싹 농부에서 사과 장인까지 올라가 보세요! 🍎<br>점수 인증은 댓글로 남겨 주시면 정말 반가울 것 같아요. 😊</p>
-
-</div>
+<script src="game.js"></script>
+</body>
+</html>
