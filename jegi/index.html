@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>통통 제기 - 추억의 제기차기 게임 (Jegi Kick)</title>
+<meta name="description" content="설치 없이 바로 하는 무료 제기차기 게임. 왼발·오른발 타이밍 맞춰 차기, 양발차기·헐렁이 기술, AI 대결·2인용.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Jua&display=swap" rel="stylesheet">
+<style>
+:root{--ink:#4a2e1e;--cream:#fff8ec;--line:#d9b48a;--org:#ff8a3d;--org-d:#c45f1c;}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+html,body{height:100%;overflow:hidden;}
+body{font-family:'Jua','Apple SD Gothic Neo','Malgun Gothic','Noto Sans KR',sans-serif;background:#cfe8f7;color:var(--ink);user-select:none;-webkit-user-select:none;touch-action:manipulation;word-break:keep-all;}
+#app{position:fixed;inset:0;display:flex;flex-direction:column;}
+#hud{flex:0 0 auto;display:flex;align-items:center;gap:6px;padding:8px 8px 4px;background:linear-gradient(#e6f4fd,#cfe8f7);}
+.pchip{flex:1;min-width:0;background:var(--cream);border:3px solid var(--line);border-radius:14px;height:46px;display:flex;align-items:center;gap:6px;padding:0 8px;white-space:nowrap;overflow:hidden;box-shadow:0 3px 0 rgba(0,0,0,.1);}
+.pchip.on{border-color:var(--org);box-shadow:0 3px 0 var(--org-d);}
+.pchip .face{font-size:22px;flex:0 0 auto;}
+.pchip .info{display:flex;flex-direction:column;line-height:1.1;min-width:0;}
+.pchip .nm{font-size:13px;color:#8a6a4a;overflow:hidden;text-overflow:ellipsis;}
+.pchip .sc{font-size:17px;}
+.ibtn{width:46px;height:46px;border-radius:12px;border:3px solid var(--line);background:var(--cream);font-size:19px;cursor:pointer;box-shadow:0 3px 0 rgba(0,0,0,.1);flex:0 0 auto;color:var(--ink);font-family:inherit;}
+.ibtn:active{transform:translateY(2px);box-shadow:0 1px 0 rgba(0,0,0,.1);}
+#stage{flex:1;position:relative;min-height:0;}
+#cv{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none;}
+.overlay{position:absolute;inset:0;display:none;align-items:center;justify-content:center;padding:14px;z-index:10;}
+.overlay.show{display:flex;}
+.dim{background:rgba(40,60,80,.35);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);z-index:20;}
+.panel{background:var(--cream);border:4px solid #c98a4b;border-radius:26px;padding:18px 16px;width:100%;max-width:380px;max-height:100%;overflow:auto;text-align:center;box-shadow:0 8px 0 rgba(0,0,0,.16);animation:pop .25s ease-out;}
+@keyframes pop{from{transform:scale(.85);opacity:0}to{transform:scale(1);opacity:1}}
+.title{font-size:42px;color:var(--org);text-shadow:0 3px 0 #fff,0 5px 0 rgba(0,0,0,.12);line-height:1.1;}
+.sub{font-size:16px;margin:6px 0 10px;}
+.howto{background:#fff;border:2px dashed var(--line);border-radius:16px;padding:9px 12px;font-size:15px;line-height:1.6;text-align:left;margin-bottom:6px;}
+.opt{margin:9px 0;text-align:left;}
+.opt label{display:block;font-size:14px;color:#8a6a4a;margin-bottom:4px;}
+.seg{display:flex;gap:6px;}
+.seg button{flex:1;border:2px solid #ecd2ae;background:#fff;border-radius:12px;padding:8px 2px;font-family:inherit;font-size:16px;color:var(--ink);cursor:pointer;}
+.seg button.on{background:#ffe6d2;border-color:var(--org);box-shadow:inset 0 -3px 0 rgba(0,0,0,.08);}
+.jegis{display:grid;grid-template-columns:repeat(8,1fr);gap:4px;}
+.jegis button{aspect-ratio:1;border:2px solid #ecd2ae;border-radius:10px;background:#fff;cursor:pointer;padding:0;display:flex;align-items:center;justify-content:center;}
+.jegis button.on{border:3px solid var(--org);}
+.jegis button.lock{background:#e6dccd;cursor:default;font-size:14px;}
+.jegis canvas{width:100%;height:100%;}
+.btn{display:block;width:100%;border:none;border-radius:16px;padding:13px 10px;margin-top:12px;font-family:inherit;font-size:21px;color:#fff;cursor:pointer;background:var(--org);box-shadow:0 5px 0 var(--org-d);}
+.btn:active{transform:translateY(3px);box-shadow:0 2px 0 var(--org-d);}
+.btn.plain{background:#ecdcc0;color:var(--ink);box-shadow:0 5px 0 #c9ad83;}
+.btn.plain:active{box-shadow:0 2px 0 #c9ad83;}
+.row{display:flex;gap:8px;}
+.row .btn{flex:1;}
+.rec{margin-top:10px;font-size:15px;}
+.resEmoji{font-size:66px;line-height:1.1;}
+.resTitle{font-size:32px;color:var(--org);}
+.resMsg{font-size:16px;margin:4px 0 10px;}
+.resInfo{background:#fff;border:2px solid #ecd2ae;border-radius:14px;padding:10px;font-size:16px;line-height:1.7;}
+.unlock{display:inline-block;background:#ffd84d;border-radius:12px;padding:4px 12px;font-size:16px;margin-top:8px;animation:wig .6s infinite alternate;}
+@keyframes wig{from{transform:rotate(-4deg)}to{transform:rotate(4deg) scale(1.06)}}
+.hidden{display:none !important;}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="hud">
+    <div class="pchip" id="p0"><span class="face" id="p0f">🙂</span><span class="info"><span class="nm" id="p0n">나</span><span class="sc" id="p0s">0개</span></span></div>
+    <div class="pchip" id="p1"><span class="face" id="p1f">🤖</span><span class="info"><span class="nm" id="p1n">AI</span><span class="sc" id="p1s">0개</span></span></div>
+    <button class="ibtn" id="btnHome" aria-label="처음으로">🏠</button>
+    <button class="ibtn" id="btnSound" aria-label="효과음 켜기/끄기">🔊</button>
+  </div>
+  <div id="stage"><canvas id="cv"></canvas></div>
+
+  <div class="overlay dim show" id="menu">
+    <div class="panel">
+      <div class="title">통통 제기</div>
+      <p class="sub">떨어지는 제기를 발로 통! 몇 개까지 찰까?</p>
+      <div class="howto">
+        ① 제기가 떨어지는 쪽 발 근처 <b>원이 초록색</b>이 될 때 차요<br>
+        ② 휴대폰은 화면 <b>왼쪽·오른쪽</b>을 탭, PC는 <b>← →</b> 키<br>
+        ③ 10개마다 <b>양발차기 → 헐렁이 → 섞어차기</b>로 기술이 바뀌어요
+      </div>
+      <div class="opt"><label>게임 방식</label>
+        <div class="seg" data-key="mode"><button data-v="solo">🙂 혼자</button><button data-v="ai">🤖 AI 대결</button><button data-v="pvp">👫 2인용</button></div>
+      </div>
+      <div class="opt"><label>난이도</label>
+        <div class="seg" data-key="level"><button data-v="easy">쉬움</button><button data-v="normal">보통</button><button data-v="hard">어려움</button></div>
+      </div>
+      <div class="opt"><label id="jegiLabel">내 제기 (기록을 넘으면 새 제기가 열려요)</label><div class="jegis" id="jegis"></div></div>
+      <button class="btn" id="btnStart">시작하기</button>
+      <div class="rec" id="menuRec"></div>
+    </div>
+  </div>
+
+  <div class="overlay dim" id="confirm">
+    <div class="panel">
+      <div class="title" style="font-size:28px">처음으로 갈까요?</div>
+      <p class="sub">지금 하던 판은 사라져요.</p>
+      <div class="row"><button class="btn plain" id="btnNo">계속하기</button><button class="btn" id="btnYes">처음으로</button></div>
+    </div>
+  </div>
+
+  <div class="overlay dim" id="result">
+    <div class="panel">
+      <div class="resEmoji" id="resEmoji">🎉</div>
+      <div class="resTitle" id="resTitle">20개!</div>
+      <div class="resMsg" id="resMsg"></div>
+      <div class="resInfo" id="resInfo"></div>
+      <div id="resUnlock"></div>
+      <div class="row"><button class="btn" id="btnAgain">다시 하기</button><button class="btn plain" id="btnMenu">처음으로</button></div>
+    </div>
+  </div>
+</div>
+<script src="game.js"></script>
+</body>
+</html>
