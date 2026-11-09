@@ -1,25 +1,25 @@
 /* 사과 게임 (Apple Ten) - 쉬는시간 오락실 */
 (() => {
   'use strict';
- 
+
   // ===== 설정 =====
-  const ROWS = 10, COLS = 17;          // 데이터 기준 판 크기 (가로 화면 기준)
+  const ROWS = 8, COLS = 12;           // 데이터 기준 판 크기 (가로 화면 기준)
   const TIME_LIMIT = 120;              // 기본 모드 제한 시간(초)
   const HINTS = 3;                     // 힌트 횟수
   const GRADES = [                     // [최소 점수, 이모지, 등급, 한마디]
-    [110, '👑', '사과 장인', '사과밭의 전설이 나타났어요!'],
-    [80,  '🧺', '수확왕',   '바구니가 넘칠 만큼 땄어요!'],
-    [50,  '🍎', '사과 농부', '어엿한 사과 농부가 됐어요!'],
+    [70, '👑', '사과 장인', '사과밭의 전설이 나타났어요!'],
+    [50,  '🧺', '수확왕',   '바구니가 넘칠 만큼 땄어요!'],
+    [30,  '🍎', '사과 농부', '어엿한 사과 농부가 됐어요!'],
     [0,   '🌱', '새싹 농부', '몇 판만 해 보면 금방 늘어요!']
   ];
-  const KEY_BEST = 'appleTen.best', KEY_SOUND = 'appleTen.sound';
- 
+  const KEY_BEST = 'appleTen.best.v2', KEY_SOUND = 'appleTen.sound';
+
   // ===== 저장소 (막혀 있어도 게임은 동작) =====
   const store = {
     get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } },
     set(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* 무시 */ } }
   };
- 
+
   // ===== 요소 =====
   const $ = id => document.getElementById(id);
   const stage = $('stage'), canvas = $('board'), ctx = canvas.getContext('2d');
@@ -29,7 +29,7 @@
     cd: $('cdOverlay'), cdText: $('cdText'), pause: $('pauseOverlay'),
     menu: $('menu'), menuBest: $('menuBest'), result: $('result')
   };
- 
+
   // ===== 상태 =====
   let grid = [];                 // grid[r][c], 0 = 빈칸
   let state = 'menu';            // menu | countdown | playing | paused | over
@@ -42,7 +42,7 @@
   let sprites = [];
   let cdTimers = [];
   let lastT = 0, clock = 0;
- 
+
   // ===== 효과음 (코드로 생성) =====
   let ac = null;
   function ensureAudio() {
@@ -76,12 +76,12 @@
     end() { [784, 659, 523, 659, 784].forEach((f, i) => tone(f, 0.16, 'triangle', 0.15, 0, i * 0.11)); },
     record() { [523, 659, 784, 1047].forEach((f, i) => tone(f, 0.2, 'triangle', 0.16, 0, i * 0.12)); }
   };
- 
+
   // ===== 판 만들기 =====
   // 합 10 짝(1+9, 2+8 …)을 약 70% 섞고, 나머지는 랜덤. 전체 합은 10의 배수로 맞춤.
   function makeGrid() {
     const n = ROWS * COLS, vals = [];
-    const pairs = Math.floor(n * 0.35);
+    const pairs = Math.floor(n * 0.4);
     for (let i = 0; i < pairs; i++) { const a = 1 + Math.floor(Math.random() * 9); vals.push(a, 10 - a); }
     while (vals.length < n) vals.push(1 + Math.floor(Math.random() * 9));
     for (let i = vals.length - 1; i > 0; i--) {
@@ -97,7 +97,7 @@
     grid = [];
     for (let r = 0; r < ROWS; r++) grid.push(vals.slice(r * COLS, (r + 1) * COLS));
   }
- 
+
   // 합 10이 되는 직사각형 찾기 (누적합 사용)
   function findMoves(max) {
     const P = [];
@@ -116,7 +116,7 @@
           }
     return res;
   }
- 
+
   // ===== 화면 배치 =====
   function layout() {
     const rect = stage.getBoundingClientRect();
@@ -141,7 +141,7 @@
     const x = L.portrait ? r : c, y = L.portrait ? c : r;
     return [L.ox + (x + 0.5) * L.cell, L.oy + (y + 0.5) * L.cell];
   }
- 
+
   // ===== 사과 그림 (미리 그려두기) =====
   function buildSprites() {
     const s = Math.max(12, Math.round(L.cell * L.dpr));
@@ -190,7 +190,7 @@
     g.strokeText(String(v), cx, cy + ry * 0.14);
     g.fillStyle = '#fff'; g.fillText(String(v), cx, cy + ry * 0.14);
   }
- 
+
   // ===== 선택 영역 =====
   function getSelection() {
     if (!drag) return null;
@@ -205,7 +205,7 @@
       }
     return { x0, y0, x1, y1, cells, sum };
   }
- 
+
   function pointerPos(e) {
     const r = canvas.getBoundingClientRect();
     return { x: e.clientX - r.left, y: e.clientY - r.top };
@@ -232,7 +232,7 @@
   });
   canvas.addEventListener('pointercancel', () => { drag = null; });
   canvas.addEventListener('contextmenu', e => e.preventDefault());
- 
+
   function finishDrag() {
     const sel = getSelection();
     drag = null;
@@ -244,7 +244,7 @@
       sfx.fail();
     }
   }
- 
+
   function harvest(sel) {
     const n = sel.cells.length;
     for (const [r, c] of sel.cells) {
@@ -267,7 +267,7 @@
     );
     if (findMoves(1).length === 0) endGame('nomove');
   }
- 
+
   // ===== 힌트 =====
   function useHint() {
     if (state !== 'playing' || hintsLeft <= 0) return;
@@ -285,10 +285,10 @@
     sfx.hint();
     updateHud();
   }
- 
+
   // ===== 게임 흐름 =====
   function clearCountdown() { cdTimers.forEach(clearTimeout); cdTimers = []; }
- 
+
   function startGame(m) {
     ensureAudio();
     clearCountdown();
@@ -316,7 +316,7 @@
       updateHud();
     }, steps.length * 650));
   }
- 
+
   function pauseGame() {
     if (state !== 'playing') return;
     state = 'paused'; drag = null;
@@ -329,14 +329,14 @@
     state = 'playing';
     updateHud();
   }
- 
+
   function endGame(reason) {
     if (state !== 'playing') return;
     state = 'over'; drag = null;
     updateHud();
     setTimeout(() => showResult(reason), 750);
   }
- 
+
   function showResult(reason) {
     const normal = mode === 'normal';
     let best = parseInt(store.get(KEY_BEST, '0'), 10) || 0;
@@ -357,7 +357,7 @@
     el.result.classList.add('show');
     if (newRec) sfx.record(); else sfx.end();
   }
- 
+
   function showMenu() {
     clearCountdown();
     state = 'menu'; drag = null;
@@ -368,7 +368,7 @@
     el.menu.classList.add('show');
     updateHud();
   }
- 
+
   // ===== 상단 정보 =====
   function updateHud() {
     el.score.textContent = score;
@@ -391,7 +391,7 @@
     el.timerText.textContent = Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0');
     el.timer.className = (t <= 10 && state === 'playing') ? 'danger' : '';
   }
- 
+
   // ===== 그리기 =====
   function roundRect(x, y, w, h, r) {
     ctx.beginPath();
@@ -402,13 +402,13 @@
     ctx.arcTo(x, y, x + w, y, r);
     ctx.closePath();
   }
- 
+
   function render() {
     ctx.setTransform(L.dpr, 0, 0, L.dpr, 0, 0);
     ctx.clearRect(0, 0, L.w, L.h);
     const cell = L.cell, bw = cell * L.dc, bh = cell * L.dr;
     const m = Math.max(5, cell * 0.18);
- 
+
     // 나무 상자
     roundRect(L.ox - m, L.oy - m, bw + m * 2, bh + m * 2, m * 1.4);
     ctx.fillStyle = '#c98f52'; ctx.fill();
@@ -419,12 +419,12 @@
       const y = L.oy + i * cell;
       ctx.beginPath(); ctx.moveTo(L.ox, y); ctx.lineTo(L.ox + bw, y); ctx.stroke();
     }
- 
+
     const hideApples = state === 'countdown' || state === 'paused';
     const sel = getSelection();
     const selSet = new Set(sel ? sel.cells.map(([r, c]) => r * COLS + c) : []);
     const pulse = 0.5 + 0.5 * Math.sin(clock * 10);
- 
+
     if (!hideApples) {
       for (let r = 0; r < ROWS; r++)
         for (let c = 0; c < COLS; c++) {
@@ -450,7 +450,7 @@
           ctx.drawImage(sprites[v], x - cell * s / 2, y - cell * s / 2, cell * s, cell * s);
         }
     }
- 
+
     // 드래그 네모 + 합계 말풍선
     if (sel && state === 'playing') {
       const w = sel.x1 - sel.x0, h = sel.y1 - sel.y0;
@@ -478,7 +478,7 @@
         ctx.fillText(label, bx + tw / 2, by + fs * 0.78);
       }
     }
- 
+
     // 틀렸을 때 흔들리는 네모
     if (shake) {
       const k = 1 - shake.t / 0.35;
@@ -486,7 +486,7 @@
       ctx.strokeStyle = `rgba(220,50,50,${k})`; ctx.lineWidth = 3;
       roundRect(shake.x0 + off, shake.y0, shake.x1 - shake.x0, shake.y1 - shake.y0, 8); ctx.stroke();
     }
- 
+
     // 날아가는 사과
     for (const p of particles) {
       ctx.save();
@@ -496,7 +496,7 @@
       ctx.drawImage(sprites[p.v], -s / 2, -s / 2, s, s);
       ctx.restore();
     }
- 
+
     // +점수 글자
     for (const t of texts) {
       const fs = Math.max(20, cell * (t.big ? 0.95 : 0.7));
@@ -511,7 +511,7 @@
       ctx.globalAlpha = 1;
     }
   }
- 
+
   // ===== 루프 =====
   function update(dt) {
     clock += dt;
@@ -540,7 +540,7 @@
     render();
     requestAnimationFrame(loop);
   }
- 
+
   // ===== 버튼 =====
   $('btnNormal').addEventListener('click', () => startGame('normal'));
   $('btnPractice').addEventListener('click', () => startGame('practice'));
@@ -565,12 +565,12 @@
   });
   document.addEventListener('visibilitychange', () => { if (document.hidden) pauseGame(); });
   window.addEventListener('blur', () => { if (state === 'playing' && drag) drag = null; });
- 
+
   let resizeTimer = 0;
   function onResize() { clearTimeout(resizeTimer); resizeTimer = setTimeout(layout, 60); }
   window.addEventListener('resize', onResize);
   if (window.ResizeObserver) new ResizeObserver(onResize).observe(stage);
- 
+
   // ===== 시작 =====
   makeGrid();               // 메뉴 뒤에 보일 사과판
   layout();
