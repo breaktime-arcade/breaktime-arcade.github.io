@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>딱! 딱지치기 - 추억의 딱지치기 게임 (Ddakji Slam)</title>
+<meta name="description" content="설치 없이 바로 하는 무료 딱지치기 게임. 조준하고, 힘을 모아, 딱! AI 대결·2인용·혼자 하기와 딱지 모음집.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Jua&display=swap" rel="stylesheet">
+<style>
+:root{--ink:#4a2e1e;--cream:#fff8ec;--line:#d9b48a;--red:#f05a4f;--red-d:#b5372f;--blue:#3f8de0;--blue-d:#2a62a3;}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+html,body{height:100%;overflow:hidden;}
+body{font-family:'Jua','Apple SD Gothic Neo','Malgun Gothic','Noto Sans KR',sans-serif;background:#e9c99b;color:var(--ink);user-select:none;-webkit-user-select:none;touch-action:manipulation;word-break:keep-all;}
+#app{position:fixed;inset:0;display:flex;flex-direction:column;}
+#hud{flex:0 0 auto;display:flex;align-items:center;gap:6px;padding:8px 8px 4px;background:linear-gradient(#f7dfb8,#e9c99b);}
+.pchip{flex:1;min-width:0;background:var(--cream);border:3px solid var(--line);border-radius:14px;height:46px;display:flex;align-items:center;gap:6px;padding:0 8px;white-space:nowrap;overflow:hidden;box-shadow:0 3px 0 rgba(0,0,0,.1);transition:transform .2s;}
+.pchip.on{border-color:var(--red);box-shadow:0 3px 0 var(--red-d);transform:translateY(-1px);}
+.pchip .face{font-size:22px;flex:0 0 auto;}
+.pchip .info{display:flex;flex-direction:column;line-height:1.1;min-width:0;}
+.pchip .nm{font-size:13px;color:#8a6a4a;overflow:hidden;text-overflow:ellipsis;}
+.pchip .sc{font-size:18px;letter-spacing:1px;}
+.ibtn{width:46px;height:46px;border-radius:12px;border:3px solid var(--line);background:var(--cream);font-size:19px;cursor:pointer;box-shadow:0 3px 0 rgba(0,0,0,.1);flex:0 0 auto;color:var(--ink);font-family:inherit;}
+.ibtn:active{transform:translateY(2px);box-shadow:0 1px 0 rgba(0,0,0,.1);}
+#stage{flex:1;position:relative;min-height:0;}
+#cv{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none;}
+.overlay{position:absolute;inset:0;display:none;align-items:center;justify-content:center;padding:14px;z-index:10;}
+.overlay.show{display:flex;}
+.dim{background:rgba(70,40,20,.35);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);z-index:20;}
+.panel{background:var(--cream);border:4px solid #c98a4b;border-radius:26px;padding:18px 16px;width:100%;max-width:380px;max-height:100%;overflow:auto;text-align:center;box-shadow:0 8px 0 rgba(0,0,0,.16);animation:pop .25s ease-out;}
+@keyframes pop{from{transform:scale(.85);opacity:0}to{transform:scale(1);opacity:1}}
+.title{font-size:40px;color:var(--red);text-shadow:0 3px 0 #fff,0 5px 0 rgba(0,0,0,.12);line-height:1.1;}
+.sub{font-size:16px;margin:6px 0 10px;}
+.howto{background:#fff;border:2px dashed var(--line);border-radius:16px;padding:9px 12px;font-size:15px;line-height:1.6;text-align:left;margin-bottom:6px;}
+.opt{margin:9px 0;text-align:left;}
+.opt label{display:block;font-size:14px;color:#8a6a4a;margin-bottom:4px;}
+.seg{display:flex;gap:6px;}
+.seg button{flex:1;border:2px solid #ecd2ae;background:#fff;border-radius:12px;padding:8px 2px;font-family:inherit;font-size:16px;color:var(--ink);cursor:pointer;}
+.seg button.on{background:#ffe0d6;border-color:var(--red);box-shadow:inset 0 -3px 0 rgba(0,0,0,.08);}
+.btn{display:block;width:100%;border:none;border-radius:16px;padding:13px 10px;margin-top:12px;font-family:inherit;font-size:21px;color:#fff;cursor:pointer;background:var(--red);box-shadow:0 5px 0 var(--red-d);}
+.btn:active{transform:translateY(3px);box-shadow:0 2px 0 var(--red-d);}
+.btn.blue{background:var(--blue);box-shadow:0 5px 0 var(--blue-d);}
+.btn.blue:active{box-shadow:0 2px 0 var(--blue-d);}
+.btn.plain{background:#ecdcc0;color:var(--ink);box-shadow:0 5px 0 #c9ad83;}
+.btn.plain:active{box-shadow:0 2px 0 #c9ad83;}
+.row{display:flex;gap:8px;}
+.row .btn{flex:1;}
+.rec{margin-top:10px;font-size:15px;}
+.types{display:flex;gap:6px;}
+.types button{flex:1;border:2px solid #ecd2ae;background:#fff;border-radius:14px;padding:8px 4px;font-family:inherit;color:var(--ink);cursor:pointer;}
+.types button.on{background:#ffe0d6;border-color:var(--red);}
+.types b{display:block;font-size:17px;font-weight:normal;}
+.types small{display:block;font-size:12px;color:#8a6a4a;line-height:1.35;margin-top:2px;}
+.grid{display:grid;grid-template-columns:repeat(6,1fr);gap:5px;}
+.grid button{aspect-ratio:1;border:2px solid #ecd2ae;border-radius:12px;font-size:22px;cursor:pointer;font-family:inherit;display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1;}
+.grid button span{font-size:11px;color:#5a4030;margin-top:3px;}
+.grid button.on{border:3px solid var(--red);transform:scale(1.04);}
+.grid button.lock{background:#e6dccd !important;color:#a99;cursor:default;}
+.resEmoji{font-size:66px;line-height:1.1;}
+.resTitle{font-size:32px;color:var(--red);}
+.resMsg{font-size:16px;margin:4px 0 10px;}
+.resInfo{background:#fff;border:2px solid #ecd2ae;border-radius:14px;padding:10px;font-size:16px;line-height:1.7;}
+.unlock{display:inline-block;background:#ffd84d;border-radius:12px;padding:4px 12px;font-size:16px;margin-top:8px;animation:wig .6s infinite alternate;}
+@keyframes wig{from{transform:rotate(-4deg)}to{transform:rotate(4deg) scale(1.06)}}
+/* ===== 만화 외곽선 + 공책 ===== */
+:root{--ol:#2a1a10;}
+.pchip,.ibtn{border:2.5px solid var(--ol);background:#fffdf4;box-shadow:0 3px 0 var(--ol);}
+.pchip.on{border-color:var(--ol);background:#ffe9e2;box-shadow:0 3px 0 var(--ol),0 0 0 3px #ff9a8a inset;}
+.ibtn.off{opacity:.45;}
+.panel{position:relative;border:3px solid var(--ol);border-radius:20px;box-shadow:0 7px 0 var(--ol);padding-top:30px;
+  background-color:#fffdf6;background-image:repeating-linear-gradient(to bottom,transparent 0,transparent 27px,#dce9f7 27px,#dce9f7 28px);background-attachment:local;}
+.panel::before{content:'';position:absolute;left:18px;right:18px;top:9px;height:11px;
+  background:radial-gradient(circle at 6px 5.5px,#efe3cf 0 3.2px,var(--ol) 3.6px 4.6px,transparent 5px) repeat-x;background-size:24px 11px;}
+.title{-webkit-text-stroke:1.6px var(--ol);text-shadow:0 4px 0 var(--ol);letter-spacing:1px;}
+.resTitle{-webkit-text-stroke:1.2px var(--ol);text-shadow:0 3px 0 var(--ol);}
+.btn{border:2.5px solid var(--ol)!important;box-shadow:0 4px 0 var(--ol)!important;}
+.btn:active{box-shadow:0 1px 0 var(--ol)!important;}
+.btn.plain{background:#fff3d6;}
+.seg button,.types button,.grid button{border-width:2px;border-color:#cdb08a;}
+.seg button.on,.types button.on{border-color:var(--ol);box-shadow:0 2px 0 var(--ol);}
+.grid button.on{border:3px solid var(--ol);}
+.grid button{position:relative;}
+.grid button i{position:absolute;top:2px;right:3px;font-style:normal;font-size:12px;}
+.grid button.shiny{box-shadow:0 0 0 2px #fff inset,0 0 10px #ffd84d;}
+.howto,.resInfo{background:rgba(255,255,255,.88);}
+.unlock{border:2px solid var(--ol);}
+.seg.stages button{font-size:14px;padding:7px 1px;}
+#daily{margin-top:10px;background:#fff6dc;border:2px dashed #e0a422;border-radius:14px;padding:8px 10px;font-size:14px;line-height:1.5;text-align:left;}
+#daily span{color:#b07800;font-size:13px;}
+#daily .ok{color:#2f9e5b;}
+#daily.done{background:#e8f8e8;border-color:#5fbf5a;}
+#rimRow{display:flex;gap:5px;flex-wrap:wrap;}
+#rimRow button{flex:1;min-width:60px;border:2px solid #cdb08a;background:#fff;border-radius:12px;padding:7px 2px;font-family:inherit;font-size:14px;color:var(--ink);cursor:pointer;line-height:1.2;}
+#rimRow button small{display:block;font-size:10px;color:#8a6a4a;}
+#rimRow button.on{border-color:var(--ol);box-shadow:0 2px 0 var(--ol);background:#ffe9e2;}
+#rimRow button.lock{background:#eee5d6;cursor:default;}
+.ach{display:flex;gap:10px;align-items:center;background:#fff;border:2px solid #cdb08a;border-radius:14px;padding:7px 10px;margin-bottom:6px;text-align:left;}
+.ach>span{font-size:26px;}
+.ach b{display:block;font-weight:normal;font-size:16px;}
+.ach small{font-size:12px;color:#6b4e35;}
+.ach.lock{opacity:.5;}
+#achList{max-height:52vh;overflow:auto;}
+#toast{position:absolute;left:50%;top:10px;transform:translate(-50%,-140%);background:#fffdf4;border:3px solid #ffd84d;border-radius:16px;padding:6px 14px;display:flex;gap:10px;align-items:center;z-index:30;box-shadow:0 4px 0 var(--ol);transition:transform .35s;pointer-events:none;}
+#toast.show{transform:translate(-50%,0);}
+#toast span{font-size:26px;}
+#toast small{display:block;font-size:12px;color:#b07800;}
+#toast b{font-weight:normal;font-size:16px;}
+.hidden{display:none !important;}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="hud">
+    <div class="pchip" id="p0"><span class="face" id="p0f">🙂</span><span class="info"><span class="nm" id="p0n">나</span><span class="sc" id="p0s">○○</span></span></div>
+    <div class="pchip" id="p1"><span class="face" id="p1f">🤖</span><span class="info"><span class="nm" id="p1n">AI</span><span class="sc" id="p1s">○○</span></span></div>
+    <button class="ibtn" id="btnHome" aria-label="처음으로">🏠</button>
+    <button class="ibtn" id="btnMusic" aria-label="배경 음악 켜기/끄기">🎵</button>
+    <button class="ibtn" id="btnSound" aria-label="효과음 켜기/끄기">🔊</button>
+  </div>
+  <div id="stage"><canvas id="cv"></canvas><div id="toast"></div></div>
+
+  <div class="overlay dim show" id="menu">
+    <div class="panel">
+      <div class="title">딱! 딱지치기</div>
+      <p class="sub">상대 딱지를 내리쳐서 뒤집으면 내 거!</p>
+      <div class="howto">
+        ① 조준점이 움직일 때 눌러 <b>칠 곳</b>을 정해요<br>
+        ② 힘 게이지가 <b>초록 칸</b>에 올 때 눌러요<br>
+        ③ 딱지 <b>가장자리</b>를 칠수록 잘 뒤집혀요
+      </div>
+      <div class="opt"><label>게임 방식</label>
+        <div class="seg" data-key="mode"><button data-v="ai">🤖 AI 대결</button><button data-v="pvp">👫 2인용</button><button data-v="solo">🙂 혼자</button></div>
+      </div>
+      <div class="opt" id="levelOpt"><label>AI 난이도</label>
+        <div class="seg" data-key="level"><button data-v="easy">쉬움</button><button data-v="normal">보통</button><button data-v="hard">어려움</button></div>
+      </div>
+      <div class="opt"><label>장소</label>
+        <div class="seg stages" data-key="stage"><button data-v="auto">🎲 랜덤</button><button data-v="alley">🧱 골목</button><button data-v="class">🏫 교실</button><button data-v="park">🛝 놀이터</button></div>
+      </div>
+      <button class="btn" id="btnNext">딱지 고르기</button>
+      <div class="row"><button class="btn plain" id="btnCol">📒 모음집·꾸미기</button><button class="btn plain" id="btnAch">🏅 업적</button></div>
+      <div id="daily"></div>
+      <div class="rec" id="menuRec"></div>
+    </div>
+  </div>
+
+  <div class="overlay dim" id="select">
+    <div class="panel">
+      <div class="title" style="font-size:28px" id="selTitle">내 딱지 고르기</div>
+      <div class="opt"><label>딱지 종류</label>
+        <div class="types" id="types">
+          <button data-v="light"><b>가벼운 딱지</b><small>조준이 느려 맞히기 쉬움<br>대신 쉽게 뒤집혀요</small></button>
+          <button data-v="normal"><b>보통 딱지</b><small>무난한<br>균형형</small></button>
+          <button data-v="heavy"><b>두꺼운 딱지</b><small>세게 치고 잘 버텨요<br>힘 게이지가 빨라요</small></button>
+        </div>
+      </div>
+      <div class="opt"><label id="patLabel">무늬 (모은 딱지)</label><div class="grid" id="patGrid"></div></div>
+      <div class="row"><button class="btn plain" id="btnSelBack">뒤로</button><button class="btn" id="btnSelOk">시작!</button></div>
+    </div>
+  </div>
+
+  <div class="overlay dim" id="col">
+    <div class="panel">
+      <div class="title" style="font-size:28px">📒 딱지 모음집</div>
+      <p class="sub" id="colCount">0 / 12</p>
+      <div class="grid" id="colGrid"></div>
+      <div class="opt" style="margin-top:12px"><label>🎨 내 딱지 테두리 꾸미기 (업적으로 열려요)</label><div id="rimRow"></div></div>
+      <p class="sub" style="font-size:13px;color:#8a6a4a;margin-top:10px">AI를 이기거나 혼자 하기에서 5장씩 뒤집으면 새 딱지! 가끔 ✨반짝 딱지가 나와요.<br>🌟 특별 딱지는 📅 오늘의 도전을 깨면 받아요.</p>
+      <button class="btn plain" id="btnColClose">닫기</button>
+    </div>
+  </div>
+
+  <div class="overlay dim" id="achs">
+    <div class="panel">
+      <div class="title" style="font-size:28px">🏅 업적</div>
+      <p class="sub" id="achCount"></p>
+      <div id="achList"></div>
+      <button class="btn plain" id="btnAchClose">닫기</button>
+    </div>
+  </div>
+
+  <div class="overlay dim" id="confirm">
+    <div class="panel">
+      <div class="title" style="font-size:28px">처음으로 갈까요?</div>
+      <p class="sub">지금 하던 판은 사라져요.</p>
+      <div class="row"><button class="btn plain" id="btnNo">계속하기</button><button class="btn" id="btnYes">처음으로</button></div>
+    </div>
+  </div>
+
+  <div class="overlay dim" id="result">
+    <div class="panel">
+      <div class="resEmoji" id="resEmoji">🎉</div>
+      <div class="resTitle" id="resTitle">이겼어요!</div>
+      <div class="resMsg" id="resMsg"></div>
+      <div class="resInfo" id="resInfo"></div>
+      <div id="resUnlock"></div>
+      <div class="row"><button class="btn" id="btnAgain">다시 하기</button><button class="btn plain" id="btnMenu">처음으로</button></div>
+      <button class="btn plain" id="btnShot" style="font-size:17px;padding:9px">📸 기록 카드 저장</button>
+    </div>
+  </div>
+</div>
+<script src="game.js"></script>
+</body>
+</html>
