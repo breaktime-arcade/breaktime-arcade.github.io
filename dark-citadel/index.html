@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>어둠의 성채</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Myeongjo:wght@700;800&family=Noto+Sans+KR:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+html,body{width:100%;height:100%;overflow:hidden;background:#07060a;color:#e8dcc4;font-family:'Noto Sans KR',sans-serif;touch-action:none}
+#app{position:fixed;inset:0;overflow:hidden}
+canvas#gl{position:absolute;inset:0;width:100%;height:100%;display:block;cursor:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28'%3E%3Cpath d='M3 3 L22 10 L14 13 L11 22 Z' fill='%23e6c27a' stroke='%23201408' stroke-width='2'/%3E%3C/svg%3E") 3 3,auto}
+.hidden{display:none!important}
+#vignette{position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse at 50% 50%,transparent 45%,rgba(0,0,0,.75) 100%)}
+#hurt{position:absolute;inset:0;pointer-events:none;opacity:0;background:radial-gradient(ellipse at 50% 50%,transparent 35%,rgba(160,0,0,.75) 100%);transition:opacity .35s}
+#low-hp{position:absolute;inset:0;pointer-events:none;opacity:0;background:radial-gradient(ellipse at 50% 50%,transparent 50%,rgba(120,0,0,.6) 100%);animation:pulse 1s infinite}
+@keyframes pulse{50%{filter:brightness(1.6)}}
+
+/* ---------- HUD ---------- */
+#hud{position:absolute;inset:0;pointer-events:none}
+.orb{position:absolute;bottom:14px;width:128px;height:128px;border-radius:50%;overflow:hidden;
+  background:radial-gradient(circle at 50% 50%,#120a0a,#000);border:4px solid #3b2f22;
+  box-shadow:0 0 0 2px #a5824a,0 0 0 6px #1a130c,0 6px 24px rgba(0,0,0,.8),inset 0 0 20px #000}
+#orb-hp{left:22px}#orb-mp{right:22px}
+.orb .fill{position:absolute;left:0;right:0;bottom:0;height:100%;transition:height .15s}
+#orb-hp .fill{background:radial-gradient(circle at 40% 30%,#ff5a4a,#b0100c 45%,#4a0204 100%)}
+#orb-mp .fill{background:radial-gradient(circle at 40% 30%,#6aa8ff,#1c3fc0 45%,#06104a 100%)}
+.orb .fill::before{content:'';position:absolute;left:-50%;top:-8px;width:200%;height:16px;border-radius:45%;background:rgba(255,255,255,.18);animation:wave 3s linear infinite}
+@keyframes wave{from{transform:translateX(0) rotate(0)}to{transform:translateX(25%) rotate(360deg)}}
+.orb .glass{position:absolute;inset:0;border-radius:50%;background:radial-gradient(circle at 32% 25%,rgba(255,255,255,.45) 0,rgba(255,255,255,.08) 22%,transparent 40%),radial-gradient(circle at 50% 120%,rgba(255,255,255,.12),transparent 50%)}
+.orb span{position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);text-align:center;font-weight:900;font-size:15px;text-shadow:0 2px 3px #000,0 0 6px #000}
+
+#bar{position:absolute;bottom:18px;left:50%;transform:translateX(-50%);display:flex;align-items:flex-end;gap:10px;pointer-events:auto}
+#skills{display:flex;gap:8px;padding:8px 10px;background:linear-gradient(#1c1610,#0c0906);border:2px solid #5a4630;border-radius:8px;box-shadow:0 4px 18px rgba(0,0,0,.8),inset 0 0 12px #000}
+.slot{position:relative;width:60px;height:60px;border:2px solid #6b5436;border-radius:6px;background:#0d0a07;overflow:hidden;cursor:pointer;transition:transform .08s}
+.slot:active{transform:scale(.94)}
+.slot .ico{position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
+.slot .ico svg{width:46px;height:46px;filter:drop-shadow(0 0 4px rgba(255,170,60,.45))}
+.slot .cd{position:absolute;inset:0;background:conic-gradient(rgba(0,0,0,.78) var(--p,0%),transparent 0);pointer-events:none}
+.slot .nomana{position:absolute;inset:0;background:rgba(20,40,140,.55);display:none}
+.slot.lowmp .nomana{display:block}
+.slot b{position:absolute;left:3px;top:1px;font-size:12px;color:#ffd98a;text-shadow:0 1px 2px #000}
+.slot i{position:absolute;right:3px;bottom:1px;font-style:normal;font-size:11px;color:#8fb8ff;text-shadow:0 1px 2px #000}
+.slot .cdt{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:18px;text-shadow:0 0 4px #000}
+.slot.ready{animation:ready .4s}
+@keyframes ready{0%{box-shadow:0 0 0 0 #ffd27a,inset 0 0 20px #ffd27a}100%{box-shadow:0 0 0 8px transparent}}
+#potion{width:52px;height:52px;margin-bottom:8px}
+#potion .cnt{position:absolute;right:4px;bottom:1px;font-weight:900;font-size:14px;color:#fff;text-shadow:0 1px 2px #000}
+.tip{position:absolute;bottom:84px;left:50%;transform:translateX(-50%);width:220px;padding:10px 12px;background:rgba(10,7,4,.95);border:1px solid #8a6a3a;border-radius:6px;font-size:12px;line-height:1.55;pointer-events:none;display:none;z-index:5}
+.tip h4{font-family:'Nanum Myeongjo',serif;color:#ffcf6e;font-size:15px;margin-bottom:4px}
+.slot:hover .tip{display:block}
+
+#minimap-wrap{position:absolute;top:14px;right:14px;width:184px;padding:2px;background:rgba(10,8,6,.6);border:2px solid #5a4630;border-radius:6px}
+#minimap{display:block;width:180px;height:180px}
+#floor-name{text-align:center;font-family:'Nanum Myeongjo',serif;font-size:14px;color:#d9b77a;padding:4px 0 2px;text-shadow:0 1px 3px #000}
+#kills{position:absolute;top:14px;left:16px;font-size:13px;color:#cbb894;text-shadow:0 1px 3px #000}
+#kills b{color:#ffd27a}
+#msg{position:absolute;top:22%;left:0;right:0;text-align:center;font-family:'Nanum Myeongjo',serif;font-size:24px;font-weight:800;color:#f2d390;text-shadow:0 0 12px #000,0 2px 4px #000;opacity:0;transition:opacity .5s;pointer-events:none;padding:0 20px}
+#help{position:absolute;bottom:170px;left:0;right:0;text-align:center;font-size:14px;color:#d8c8a8;text-shadow:0 1px 4px #000;transition:opacity 1s}
+#boss{position:absolute;top:18px;left:50%;transform:translateX(-50%);width:min(440px,60vw);text-align:center}
+#boss .nm{font-family:'Nanum Myeongjo',serif;font-weight:800;font-size:17px;color:#9fd0ff;text-shadow:0 0 8px #1a5ad0,0 2px 3px #000;margin-bottom:4px}
+#boss .bg{height:14px;border:2px solid #4a3a28;background:#120808;border-radius:3px;overflow:hidden;box-shadow:0 2px 10px #000}
+#boss .fg{height:100%;width:100%;background:linear-gradient(#e0423a,#8a0e0a);transition:width .15s}
+#btn-sound{position:absolute;top:200px;right:14px;width:36px;height:36px;border-radius:50%;border:2px solid #5a4630;background:rgba(15,10,6,.8);color:#d9b77a;font-size:16px;pointer-events:auto;cursor:pointer}
+
+/* overlays */
+#dmg-layer,#bars-layer{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.dmg{position:absolute;font-weight:900;font-size:20px;color:#fff;text-shadow:0 0 4px #000,0 2px 2px #000;white-space:nowrap;animation:dmg .9s ease-out forwards;transform:translate(-50%,-50%)}
+.dmg.crit{font-size:30px;color:#ffd23a;text-shadow:0 0 8px #ff7a00,0 2px 2px #000}
+.dmg.player{color:#ff5544;font-size:18px}
+.dmg.heal{color:#6cff7a}
+@keyframes dmg{0%{opacity:0;margin-top:0;scale:.5}12%{opacity:1;scale:1.25}25%{scale:1}100%{opacity:0;margin-top:-70px}}
+.ebar{position:absolute;width:56px;height:6px;margin-left:-28px;background:#1a0505;border:1px solid #000;box-shadow:0 0 3px #000}
+.ebar div{height:100%;background:linear-gradient(#ff4a3a,#a00e08)}
+
+/* ---------- touch ---------- */
+#touch{position:absolute;inset:0;pointer-events:none}
+#joy{position:absolute;left:0;bottom:0;width:50%;height:60%;pointer-events:auto}
+#joy-base{position:absolute;width:130px;height:130px;margin:-65px 0 0 -65px;border-radius:50%;border:2px solid rgba(230,200,140,.35);background:radial-gradient(rgba(0,0,0,.15),rgba(0,0,0,.45));display:none}
+#joy-knob{position:absolute;left:50%;top:50%;width:58px;height:58px;margin:-29px 0 0 -29px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#e8c98a,#7a5a2a);box-shadow:0 0 12px rgba(0,0,0,.7)}
+#tbtns{position:absolute;right:0;bottom:0;width:250px;height:250px;pointer-events:none}
+.tb{position:absolute;border-radius:50%;pointer-events:auto;border:2px solid #8a6a3a;background:radial-gradient(circle at 40% 30%,#2a2016,#0a0705);box-shadow:0 4px 12px rgba(0,0,0,.8);overflow:hidden}
+.tb svg{position:absolute;inset:14%;width:72%;height:72%}
+.tb .cd{position:absolute;inset:0;background:conic-gradient(rgba(0,0,0,.78) var(--p,0%),transparent 0)}
+.tb.lowmp::after{content:'';position:absolute;inset:0;background:rgba(20,40,140,.5)}
+.tb.down{filter:brightness(1.6)}
+#tb-atk{right:24px;bottom:30px;width:96px;height:96px}
+#tb-s0{right:132px;bottom:22px;width:62px;height:62px}
+#tb-s1{right:128px;bottom:96px;width:62px;height:62px}
+#tb-s2{right:76px;bottom:146px;width:62px;height:62px}
+#tb-s3{right:8px;bottom:144px;width:62px;height:62px}
+#tb-pot{right:200px;bottom:120px;width:50px;height:50px}
+#tb-pot .cnt{position:absolute;right:6px;bottom:2px;font-weight:900;font-size:13px;color:#fff;text-shadow:0 1px 2px #000}
+body.touch .orb{width:84px;height:84px;bottom:auto;top:12px}
+body.touch #orb-hp{left:12px}
+body.touch #orb-mp{left:104px;right:auto}
+body.touch .orb span{font-size:12px}
+body.touch #bar{display:none}
+body.touch #minimap-wrap{width:124px;top:10px;right:10px}
+body.touch #minimap{width:120px;height:120px}
+body.touch #floor-name{font-size:12px}
+body.touch #kills{top:104px;left:14px}
+body.touch #btn-sound{top:150px;right:10px}
+body.touch #help{bottom:22px;left:22%;right:22%;font-size:12px}
+body.touch #boss{top:118px;width:60vw}
+
+/* ---------- screens ---------- */
+.screen{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  background:radial-gradient(ellipse at 50% 35%,rgba(70,20,10,.55),rgba(5,3,6,.97) 70%),#050306;z-index:20;padding:20px;overflow:auto}
+.screen h1{font-family:'Nanum Myeongjo',serif;font-weight:800;font-size:clamp(44px,9vw,86px);letter-spacing:.12em;
+  background:linear-gradient(#ffe8b0,#d79a3a 55%,#7a3a10);-webkit-background-clip:text;background-clip:text;color:transparent;
+  filter:drop-shadow(0 0 24px rgba(255,120,30,.45)) drop-shadow(0 4px 2px #000)}
+.screen .sub{color:#a89070;margin:6px 0 26px;letter-spacing:.3em;font-size:13px}
+#classes{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-bottom:22px}
+.cls{width:120px;padding:14px 8px;border:2px solid #4a3828;border-radius:8px;background:linear-gradient(#1a130d,#0b0806);text-align:center;cursor:pointer;transition:.2s;position:relative}
+.cls .ic{font-size:0;height:56px;display:flex;align-items:center;justify-content:center}
+.cls .ic svg{width:52px;height:52px}
+.cls .n{font-family:'Nanum Myeongjo',serif;font-weight:800;font-size:18px;margin-top:6px}
+.cls .d{font-size:11px;color:#9a8466;margin-top:3px}
+.cls.on{border-color:#e0a84a;box-shadow:0 0 18px rgba(230,160,60,.5),inset 0 0 14px rgba(230,160,60,.2)}
+.cls.lock{opacity:.38;cursor:default;filter:grayscale(.8)}
+.cls.lock::after{content:'준비 중';position:absolute;top:6px;right:6px;font-size:10px;color:#ccc;background:#333;padding:1px 5px;border-radius:3px}
+#quality{display:flex;gap:6px;align-items:center;margin-bottom:22px;font-size:13px;color:#a89070}
+#quality button{padding:5px 12px;border:1px solid #5a4630;background:#120d08;color:#c9b08a;border-radius:4px;cursor:pointer;font-family:inherit}
+#quality button.on{background:#5a3a14;color:#ffe2a8;border-color:#d79a3a}
+.big{font-family:'Nanum Myeongjo',serif;font-weight:800;font-size:22px;padding:12px 48px;border:2px solid #d79a3a;border-radius:6px;cursor:pointer;color:#ffe8b0;
+  background:linear-gradient(#7a3a10,#3a1606);box-shadow:0 0 22px rgba(230,120,30,.45),inset 0 1px 0 rgba(255,220,160,.4);transition:.15s}
+.big:hover{filter:brightness(1.25);transform:translateY(-1px)}
+.keys{margin-top:22px;font-size:12px;color:#8a7558;text-align:center;line-height:1.8}
+#over h2{font-family:'Nanum Myeongjo',serif;font-weight:800;font-size:clamp(40px,8vw,72px);margin-bottom:10px}
+#over.dead h2{color:#c0201a;text-shadow:0 0 30px #600}
+#over.win h2{color:#ffd27a;text-shadow:0 0 30px #a05a00}
+#over p{color:#c9b08a;margin-bottom:26px;line-height:1.8;text-align:center}
+#loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:#050306;z-index:30;font-family:'Nanum Myeongjo',serif;color:#d79a3a;font-size:20px;letter-spacing:.2em}
+</style>
+<script type="importmap">
+{"imports":{
+  "three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+  "three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+}}
+</script>
+</head>
+<body>
+<div id="app">
+  <canvas id="gl"></canvas>
+  <div id="vignette"></div>
+  <div id="low-hp"></div>
+  <div id="hurt"></div>
+  <div id="bars-layer"></div>
+  <div id="dmg-layer"></div>
+
+  <div id="hud" class="hidden">
+    <div id="kills">처치 <b id="kc">0</b></div>
+    <div id="orb-hp" class="orb"><div class="fill"></div><div class="glass"></div><span></span></div>
+    <div id="orb-mp" class="orb"><div class="fill"></div><div class="glass"></div><span></span></div>
+    <div id="bar">
+      <div id="skills"></div>
+      <div id="potion" class="slot"><div class="ico"></div><b>Q</b><span class="cnt">3</span>
+        <div class="tip"><h4>치유 물약</h4>생명력을 즉시 70 회복합니다.</div></div>
+    </div>
+    <div id="minimap-wrap"><canvas id="minimap" width="180" height="180"></canvas><div id="floor-name">1층 · 지하 묘지</div></div>
+    <div id="boss" class="hidden"><div class="nm"></div><div class="bg"><div class="fg"></div></div></div>
+    <button id="btn-sound" title="소리">🔊</button>
+    <div id="msg"></div>
+    <div id="help"></div>
+  </div>
+
+  <div id="touch" class="hidden">
+    <div id="joy"><div id="joy-base"><div id="joy-knob"></div></div></div>
+    <div id="tbtns">
+      <div class="tb" id="tb-pot"><span class="cnt">3</span></div>
+      <div class="tb" id="tb-s0"><div class="cd"></div></div>
+      <div class="tb" id="tb-s1"><div class="cd"></div></div>
+      <div class="tb" id="tb-s2"><div class="cd"></div></div>
+      <div class="tb" id="tb-s3"><div class="cd"></div></div>
+      <div class="tb" id="tb-atk"></div>
+    </div>
+  </div>
+
+  <div id="title" class="screen">
+    <h1>어둠의 성채</h1>
+    <div class="sub">성채 깊은 곳, 어둠의 군주가 깨어난다</div>
+    <div id="classes"></div>
+    <div id="quality">그래픽 <button data-q="high">상</button><button data-q="mid">중</button><button data-q="low">하</button></div>
+    <button class="big" id="btn-start">모험 시작</button>
+    <div class="keys" id="keys-pc">마우스 클릭: 이동·공격 &nbsp;|&nbsp; 1~4: 스킬 &nbsp;|&nbsp; Q: 물약 &nbsp;|&nbsp; WASD: 이동 &nbsp;|&nbsp; 휠: 확대</div>
+  </div>
+
+  <div id="over" class="screen hidden">
+    <h2></h2>
+    <p></p>
+    <button class="big" id="btn-retry">다시 도전</button>
+  </div>
+  <div id="loading" class="hidden">성채로 들어가는 중…</div>
+</div>
+<script type="module" src="game.js"></script>
+</body>
+</html>
