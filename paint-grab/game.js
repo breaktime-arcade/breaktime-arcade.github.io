@@ -407,6 +407,9 @@ function showResult(o) {
   $('resBest').textContent = o.best || '';
   const box = $('resBtns'); box.innerHTML = '';
   (o.buttons || []).forEach(([txt, cls, fn]) => { const b = document.createElement('button'); b.className = 'btn sm ' + cls; b.textContent = txt; b.onclick = fn; box.appendChild(b); });
+  const a = document.createElement('a');
+  a.className = 'morelink'; a.href = BLOG; a.target = '_top'; a.textContent = '🕹 쉬는시간 오락실에서 다른 게임 하러 가기 →';
+  box.appendChild(a);
   $('ovResult').classList.add('show');
 }
 function refreshBest() {
@@ -429,6 +432,25 @@ function goHome() {
   $('onBar').classList.remove('show');
   $('ovTitle').classList.add('show');
 }
+/* 블로그로 연결 + 전체화면 */
+const BLOG = 'https://smile-willow.tistory.com/';
+let inFrame = true;
+try { inFrame = window.self !== window.top; } catch (e) { inFrame = true; }
+if (!inFrame) $('blogBar').classList.add('show');
+const fsEl = document.documentElement;
+const fsOk = !!(document.fullscreenEnabled || document.webkitFullscreenEnabled);
+if (!fsOk) $('fsBtn').style.display = 'none';
+const isFs = () => !!(document.fullscreenElement || document.webkitFullscreenElement);
+$('fsBtn').onclick = () => {
+  try {
+    if (isFs()) (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+    else (fsEl.requestFullscreen || fsEl.webkitRequestFullscreen).call(fsEl);
+  } catch (e) {}
+};
+['fullscreenchange', 'webkitfullscreenchange'].forEach(ev => document.addEventListener(ev, () => {
+  $('fsBtn').textContent = isFs() ? '✕' : '⛶'; $('fsBtn').title = isFs() ? '전체화면 끄기' : '전체화면';
+  setTimeout(resize, 100);
+}));
 function setMute(m) { muted = m; store.set('mute', m); $('muteBtn').textContent = m ? '🔇' : '🔊'; }
 $('muteBtn').onclick = () => { setMute(!muted); if (!muted) { ac(); SFX.pop(); } };
 [...$('diffSeg').children].forEach(b => {
