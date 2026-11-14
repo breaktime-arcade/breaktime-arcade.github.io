@@ -23,7 +23,7 @@
   const pick = a => a[Math.floor(Math.random() * a.length)];
 
   let db = null, uid = null, offset = 0, nick = '';
-  let room = null, timer = null, session = 0;
+  let room = null, timer = null, session = 0, step = '';
 
   function load(src) {
     return new Promise((res, rej) => {
@@ -81,11 +81,15 @@
     ui('친구를 찾는 중…', '내 이름: ' + nick);
     try { await findRoom(my); } catch (e) {
       console.error(e);
-      ui('방을 찾지 못했어요', '잠시 후 다시 시도하거나, 혼자 하기로 즐겨주세요.');
+      const code = String((e && (e.code || e.message)) || e);
+      const denied = /permission|PERMISSION/i.test(code);
+      ui('방을 찾지 못했어요', (denied ? 'Firebase 보안 규칙에서 막혔어요. ' : '잠시 후 다시 시도하거나, 혼자 하기로 즐겨주세요. ') +
+        '[' + (step || '?') + ' / ' + code + ']');
     }
   }
 
   async function findRoom(my) {
+    step = '대기실 읽기';
     const lob = (await lobbyRef().once('value')).val() || {};
     if (my !== session) return;
     const t = now();
@@ -96,8 +100,10 @@
     }
     cands.sort((a, b) => a[1].t - b[1].t);
     for (const [rid] of cands) {
+      step = '방 정보 읽기';
       const ref = roomRef(rid).child('meta');
       await ref.once('value');
+      step = '방 입장';
       const r = await ref.transaction(m => {
         if (m === null) return null;
         if (m.status !== 'wait' || (m.cnt || 0) >= MAX) return;
@@ -109,7 +115,9 @@
     // 들어갈 방이 없으면 새로 만들기
     const rid = db.ref(ROOT + '/rooms').push().key;
     const created = now();
+    step = '방 만들기';
     await roomRef(rid).child('meta').set({ status: 'wait', host: uid, cnt: 1, created, waitUntil: created + WAIT_MS });
+    step = '대기실 등록';
     await lobbyRef(rid).set({ t: created, n: 1 });
     if (my !== session) { lobbyRef(rid).remove(); roomRef(rid).remove(); return; }
     await joinRoom(rid, my);
@@ -125,9 +133,11 @@
     room = { id: rid, ref, meta: null, players: {}, started: false, starting: false, offs: [], hostGoneAt: 0, claiming: false, wasHost: false, left: new Set(), lastSnap: null };
     const pref = ref.child('players/' + uid);
     // 같은 방 안에서 이름이 겹치지 않게
+    step = '참가자 읽기';
     const cur = (await ref.child('players').once('value')).val() || {};
     const taken = new Set(Object.values(cur).map(p => String(p.nm).split(' ').pop()));
     for (let i = 0; i < 30 && taken.has(nick.split(' ').pop()); i++) nick = pick(ADJ) + ' ' + pick(NMS);
+    step = '자리 등록';
     await pref.onDisconnect().remove();
     await pref.set({ nm: nick, rd: 0, j: firebase.database.ServerValue.TIMESTAMP });
     if (my !== session) return;
