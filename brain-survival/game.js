@@ -25,6 +25,8 @@ const SKIN = ['#ffdbb5','#f7c99b','#eeb78a','#e0a878','#ffe3c8','#f3c2a0'];
 const HAIRC = ['#1d1a24','#2b2230','#3b2a20','#5a3a22','#7a4a26','#1f2438','#8a5a2b','#4a2a3a'];
 const SHIRT = ['#e63946','#457b9d','#2a9d8f','#f4a261','#8338ec','#ff006e','#3a86ff','#06d6a0','#ffbe0b','#6d6875','#118ab2','#ef476f','#9b5de5','#00bbf9'];
 
+const randLook = () => ({ skin: pick(SKIN), hair: ri(HAIR_N), hc: pick(HAIRC), shirt: pick(SHIRT) });
+const HAIR_N = 8;
 const rnd = Math.random, ri = n => Math.floor(rnd() * n), pick = a => a[ri(a.length)];
 const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = ri(i + 1); [a[i], a[j]] = [a[j], a[i]]; } return a; };
 const esc = s => String(s).replace(/[&<>"]/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[m]));
@@ -170,22 +172,23 @@ function build(raw) {
   const opts = shuffle(rest.slice());
   return { cat, diff, text, ox: false, opts, correct: opts.indexOf(rest[0]) };
 }
-function takeFrom(filters) {
+function takeFromSet(used, lastCats, filters) {
   for (const f of filters) {
-    const c = QIDX.filter(i => !G.used.has(i) && f(i));
+    const c = QIDX.filter(i => !used.has(i) && f(i));
     if (c.length) {
       const i = pick(c);
-      G.used.add(i); recent.add(i);
+      used.add(i); recent.add(i);
       const arr = [...recent]; if (arr.length > 180) recent.delete(arr[0]);
       store.set('recent', [...recent]);
-      G.lastCats.push(QDATA[i][0]); if (G.lastCats.length > 2) G.lastCats.shift();
-      return build(QDATA[i]);
+      lastCats.push(QDATA[i][0]); if (lastCats.length > 2) lastCats.shift();
+      return { idx: i, q: build(QDATA[i]) };
     }
   }
   return null;
 }
-function pickQuestion(aliveN) {
-  const qn = G.qn + 1;
+function takeFrom(filters) { const r = takeFromSet(G.used, G.lastCats, filters); return r && r.q; }
+/* 문제 고르기 (혼자/함께 공용): used·lastCats는 호출 쪽에서 관리 */
+function chooseQuestion(used, lastCats, qn, aliveN) {
   let pool;
   if (aliveN <= 3) pool = [3, 3, 2];
   else if (qn <= 3) pool = [1];
@@ -193,8 +196,12 @@ function pickQuestion(aliveN) {
   else if (qn <= 10) pool = [2, 2, 3];
   else pool = [2, 3, 3];
   const d = pick(pool);
-  const D = i => QDATA[i][1] === d, NC = i => !G.lastCats.includes(QDATA[i][0]), NR = i => !recent.has(i);
-  return takeFrom([i => D(i) && NC(i) && NR(i), i => D(i) && NC(i), i => D(i), () => true]);
+  const D = i => QDATA[i][1] === d, NC = i => !lastCats.includes(QDATA[i][0]), NR = i => !recent.has(i);
+  return takeFromSet(used, lastCats, [i => D(i) && NC(i) && NR(i), i => D(i) && NC(i), i => D(i), () => true]);
+}
+function pickQuestion(aliveN) {
+  const r = chooseQuestion(G.used, G.lastCats, G.qn + 1, aliveN);
+  return r && r.q;
 }
 function pickRevival() {
   const OX = i => QDATA[i].length === 4, E = i => QDATA[i][1] <= 2;
@@ -202,11 +209,12 @@ function pickRevival() {
 }
 
 /* ───────── 무대 만들기 ───────── */
-function buildStage() {
+function buildStage(cs) {
+  cs = cs || G.cs;
   el.rowBack.innerHTML = ''; el.rowFront.innerHTML = '';
-  G.cs.forEach(c => {
+  cs.forEach(c => {
     const d = document.createElement('div');
-    d.className = 'ct' + (c.me ? ' me' : '');
+    d.className = 'ct' + (c.me ? ' me' : '') + (c.human && !c.me ? ' human' : '');
     d.innerHTML = (c.me ? '<span class="tag">나</span>' : '') +
       `<div class="ava">${avatarSVG(c.look)}</div><div class="board"><span>?</span></div><div class="plate">${esc(c.name)}</div>`;
     c.el = d; c.bd = d.querySelector('.board');
@@ -234,7 +242,7 @@ function renderOpts(q) {
     b.className = 'opt' + (q.ox ? (i === 0 ? ' o' : ' x') : '');
     b.innerHTML = q.ox ? esc(t) : `<span class="no">${i + 1}</span><span>${esc(t)}</span>`;
     b.disabled = true;
-    b.addEventListener('click', () => onPick(i));
+    b.addEventListener('click', () => (BS.mode === 'online' ? BS.onlinePick(i) : onPick(i)));
     el.opts.appendChild(b);
     return b;
   });
@@ -281,15 +289,16 @@ function onPick(i) {
   G.tEnd = Math.min(G.tEnd, performance.now() + 2200);
 }
 document.addEventListener('keydown', e => {
-  if (!G || G.phase !== 'answer' || !G.q) return;
+  if (BS.mode !== 'single' || !G || G.phase !== 'answer' || !G.q) return;
   const k = e.key.toLowerCase();
   if (G.q.ox) { if (k === 'o' || k === '1') onPick(0); else if (k === 'x' || k === '2') onPick(1); }
   else if (['1', '2', '3', '4'].includes(k)) onPick(+k - 1);
 });
 
 /* ───────── AI 선택 ───────── */
-function aiPick(c, q) {
-  let p = BASE[q.diff] + c.skill + (q.ox ? .05 : 0) - (q.cat === '넌센스' ? .04 : 0);
+function aiPick(c, q) { return aiPickSkill(c.skill, q); }
+function aiPickSkill(skill, q) {
+  let p = BASE[q.diff] + skill + (q.ox ? .05 : 0) - (q.cat === '넌센스' ? .04 : 0);
   p = Math.max(.2, Math.min(.97, p));
   if (rnd() < p) return q.correct;
   return pick(q.opts.map((_, i) => i).filter(i => i !== q.correct));
@@ -532,8 +541,7 @@ function newGame() {
 function idleStage() {
   const names = shuffle(NAMES.slice());
   G = { cs: [], spectate: false };
-  for (let i = 0; i < TOTAL; i++) G.cs.push({ i, me: i === ME, name: i === ME ? '나' : names.pop(), alive: true,
-    look: { skin: pick(SKIN), hair: ri(HAIR.length), hc: pick(HAIRC), shirt: pick(SHIRT) } });
+  for (let i = 0; i < TOTAL; i++) G.cs.push({ i, me: i === ME, name: i === ME ? '나' : names.pop(), alive: true, look: randLook() });
   buildStage(); G = null;
 }
 
@@ -547,12 +555,28 @@ $('muteBtn').onclick = () => { setMute(!muted); if (!muted) { ac(); SFX.click();
 $('startBtn').onclick = () => { ac(); newGame(); };
 $('againBtn').onclick = () => newGame();
 $('specRestart').onclick = () => newGame();
-$('homeBtn').onclick = () => {
-  GID++; clearTimers(); G = null;
-  $('ovResult').classList.remove('show'); refreshBest(); idleStage();
+function goHome() {
+  GID++; clearTimers(); G = null; BS.mode = 'single'; ledFast = false;
+  ['ovResult', 'ovOut'].forEach(i => $(i).classList.remove('show'));
+  el.specBar.classList.remove('show');
+  el.chip.textContent = '두뇌 서바이벌'; el.chip.style.background = ''; el.stars.innerHTML = ''; setTimerUI(1, 10);
+  refreshBest(); idleStage(); updateAliveN(TOTAL);
   el.qno.textContent = '대기 중'; el.qtext.className = 'qtext idle'; el.qtext.textContent = '곧 첫 문제가 시작됩니다!'; el.opts.innerHTML = '';
   say('두뇌 서바이벌에 오신 것을 환영합니다!');
   $('ovTitle').classList.add('show');
+}
+$('homeBtn').onclick = goHome;
+function updateAliveN(n) { el.aliveN.textContent = n; }
+$('onlineBtn').onclick = () => { ac(); if (BS.onlineStart) BS.onlineStart(); };
+
+/* 함께 하기(online.js)와 공유하는 기능 */
+const BS = window.BS = {
+  mode: 'single', el, SFX, CATS, NAMES, TOTAL, MAXQ, store, rnd, ri, pick, shuffle, esc, ac,
+  say, splash, buildStage, setBoard, renderOpts, setHead, setTimerUI, label, chooseQuestion, aiPickSkill, randLook,
+  idleStage, goHome, updateAliveN, refreshBest,
+  opts: () => optEls,
+  setLedFast: v => { ledFast = v; },
+  isMuted: () => muted
 };
 
 setMute(muted);

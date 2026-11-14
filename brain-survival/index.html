@@ -179,6 +179,16 @@ button{font-family:inherit}
 .stats div{background:rgba(255,255,255,.08);border-radius:10px;padding:8px 4px;font-size:12px;color:#cdb8ff}
 .stats b{display:block;font-size:22px;color:#fff;font-family:'Black Han Sans',sans-serif;font-weight:400}
 
+.nick{width:100%;padding:12px 14px;border-radius:12px;border:2px solid #8b5cff;background:#0d0726;color:#fff;font:700 18px 'Noto Sans KR',sans-serif;text-align:center;outline:none;margin:6px 0 4px}
+.nick:focus{border-color:var(--gold)}
+.err{min-height:20px;color:#ff8a8a;font-size:13px;margin-bottom:8px}
+.cd{font-family:'Black Han Sans',sans-serif;font-size:40px;color:#7cff9b;min-height:8px;text-shadow:0 3px 0 #0a5a2a}
+.chips{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin:10px 0;max-height:150px;overflow:auto}
+.chips span{background:rgba(56,225,255,.15);border:1px solid #38e1ff;color:#dff8ff;border-radius:999px;padding:3px 10px;font-size:13px;font-weight:700}
+.chips span.me{background:var(--gold);border-color:#fff;color:#1a1440}
+.hint{font-size:12px;color:#9a8ccc;margin:6px 0 12px}
+.ct.human .plate{background:#0e4d66;border-color:#38e1ff;color:#e6fbff}
+
 @media (max-width:700px){
   .studio{grid-template-columns:1fr;padding:8px 6px 0}
   .side{display:none}
@@ -257,7 +267,8 @@ button{font-family:inherit}
         🏆 20명 중 <b>마지막까지 살아남으면 우승!</b>
       </div>
       <div class="best" id="bestTxt"></div>
-      <button class="btn" id="startBtn">녹화 시작!</button>
+      <button class="btn" id="startBtn">혼자 하기</button>
+      <button class="btn pink" id="onlineBtn">함께 하기 (실시간)</button>
       <div style="font-size:12px;color:#9a8ccc;margin-top:10px">상식 · 역사 · 과학 · 지리 · 우리말 · 속담 · 넌센스 · 추억 300여 문제</div>
     </div>
   </div>
@@ -270,6 +281,48 @@ button{font-family:inherit}
       <div id="outBtns"></div>
     </div>
   </div>
+
+  <!-- 함께 하기: 닉네임 -->
+  <div class="ov" id="ovNick">
+    <div class="card">
+      <div class="big" style="font-size:34px">함께 하기</div>
+      <div class="desc">블로그에 접속한 사람들과 <b style="color:#ffd23f">실시간으로</b> 같은 문제를 풀어요.<br>무대에서 쓸 닉네임을 정해 주세요.</div>
+      <input id="nickInput" class="nick" maxlength="8" placeholder="닉네임 (2~8글자)" autocomplete="off">
+      <div class="err" id="nickErr"></div>
+      <button class="btn" id="nickOk">입장하기</button>
+      <button class="btn sub" id="nickCancel">돌아가기</button>
+    </div>
+  </div>
+
+  <!-- 함께 하기: 대기실 -->
+  <div class="ov" id="ovLobby">
+    <div class="card">
+      <div class="big" style="font-size:32px">📺 실시간 대기실</div>
+      <div class="desc" id="lobbyMsg">연결 중…</div>
+      <div class="cd" id="lobbyCd"></div>
+      <div class="chips" id="lobbyList"></div>
+      <div class="hint">사람이 20명보다 적으면 빈자리는 AI 참가자가 채워요.</div>
+      <button class="btn sub sm" id="lobbySolo">혼자 하기로 바꾸기</button>
+      <button class="btn sm" id="lobbyLeave">나가기</button>
+    </div>
+  </div>
+
+  <!-- 함께 하기: 최종 결과 -->
+  <div class="ov" id="ovFinal">
+    <div class="card">
+      <div class="big" id="finTitle">최종 결과</div>
+      <div class="desc" id="finDesc"></div>
+      <div class="stats" id="finStats">
+        <div>최종 순위<b id="finRank">-</b></div>
+        <div>버틴 문제<b id="finSurv">-</b></div>
+        <div>정답률<b id="finRate">-</b></div>
+      </div>
+      <div class="hint" id="finNext">잠시 후 대기실로 돌아갑니다…</div>
+      <button class="btn sm" id="finLeave">나가기</button>
+    </div>
+  </div>
+
+  <div class="specbar" id="onBar"><span id="onBarTxt">관전 중</span> <button id="onBarLeave">나가기</button></div>
 
   <!-- 결과 화면 -->
   <div class="ov" id="ovResult">
@@ -289,5 +342,7 @@ button{font-family:inherit}
 </div>
 <script src="questions.js"></script>
 <script src="game.js"></script>
+<script src="firebase-config.js"></script>
+<script src="online.js"></script>
 </body>
 </html>
