@@ -306,11 +306,11 @@ body[data-screen="result"] #screen-result{display:flex}
 /* ===================== 설정 ===================== */
 const CONFIG = {
   // 이 게임을 올린 블로그 글 주소 (공유 문구에 들어감)
-  shareUrl: 'https://smile-willow.tistory.com/',
+  shareUrl: 'https://smile-willow.tistory.com/entry/cake-half',
   // 결과 화면 '다른 게임' 링크 — url을 비워두면 표시 안 됨
   otherGames: [
-    { name: '신호등 반응속도', desc: '초록불에 누르는 반응속도 테스트', url: '' },
-    { name: '1초 전의 나', desc: '과거의 나를 피해 살아남기', url: '' },
+    { name: '신호등 반응속도', desc: '초록불에 누르는 반응속도 테스트', url: 'https://smile-willow.tistory.com/entry/reaction' },
+    { name: '1초 전의 나', desc: '과거의 나를 피해 살아남기', url: 'https://smile-willow.tistory.com/entry/one-second-ago' },
   ],
   dailyStart: '2026-09-23',   // '오늘의 케이크 #1'이 되는 날짜 (게임 공개일로 바꾸세요)
   dailyCount: 5,
@@ -1187,5 +1187,6 @@ refreshSoundButtons();
 refreshStart();
 renderMore();
 </script>
+<script src="../common/arcade.js" defer></script>
 </body>
 </html>

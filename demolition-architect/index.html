@@ -981,5 +981,6 @@ requestAnimationFrame(loop);
 window.__da = { hintPlan:()=>hintPlan().map(h=>({id:h.el.id,delay:h.delay})), openHint, addFail, get fails(){return fails;}, sim(sec){ for(let i=0;i<Math.round(sec*60);i++){ if(state==='run'&&fireT>=0){ fireT+=1/60; fireBombsDue(); } stepPhysics(); } syncMeshes(); }, calcStats, get houseHit(){return houseHit;}, get hitsLeft(){return hitsLeft;}, get bombsLeft(){return bombsLeft;}, LEVELS, pause(p){ window.__paused=p; }, buildLevel, get elements(){return elements;}, placeBomb, fire, get state(){return state;}, get frags(){return frags;}, evaluate, hitElement, get compounds(){return compounds;}, setTool(t){tool=t;} };
 })();
 </script>
+<script src="../common/arcade.js" defer></script>
 </body>
 </html>

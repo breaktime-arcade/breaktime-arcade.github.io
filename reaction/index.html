@@ -287,11 +287,11 @@ body[data-light="alert"] .main{color:var(--yellow)}
 /* ===================== 설정 ===================== */
 const CONFIG = {
   // 이 게임을 올린 블로그 글 주소 (공유 문구에 들어감)
-  shareUrl: 'https://smile-willow.tistory.com/',
+  shareUrl: 'https://smile-willow.tistory.com/entry/reaction',
   // 결과 화면 '다른 게임' 링크 — url을 비워두면 표시 안 됨
   otherGames: [
-    { name: '1초 전의 나', desc: '과거의 나를 피해 살아남기', url: '' },
-    { name: '거짓말 탐지 편의점', desc: '가짜 신분증 골라내기', url: '' },
+    { name: '1초 전의 나', desc: '과거의 나를 피해 살아남기', url: 'https://smile-willow.tistory.com/entry/one-second-ago' },
+    { name: '케이크 반 자르기', desc: '정확히 반으로 자르는 감각 테스트', url: 'https://smile-willow.tistory.com/entry/cake-half' },
   ],
   trials: 5,              // 한 세트 측정 횟수
   minValidMs: 100,        // 이보다 빠르면 예측 출발(부정출발)
@@ -685,5 +685,6 @@ document.addEventListener('visibilitychange', () => {
 refreshStart();
 renderMore();
 </script>
+<script src="../common/arcade.js" data-pos="tr" defer></script>
 </body>
 </html>
