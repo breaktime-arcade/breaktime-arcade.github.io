@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>쪽지 돌리기 - 쉬는시간 오락실</title>
+<!-- © 2026 쉬는시간 오락실 (smile-willow.tistory.com). All rights reserved. 무단 복제·배포 금지 -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gaegu:wght@700&family=Jua&display=swap" rel="stylesheet">
+<style>
+html,body{margin:0;height:100%;background:#2b2118;overflow:hidden;font-family:'Jua',sans-serif;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+#wrap{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+canvas{display:block;border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,.5);touch-action:none}
+.ov{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(30,20,10,.55);z-index:5}
+.ov.soft{background:rgba(30,20,10,.25);align-items:flex-end;padding-bottom:4vh}
+.hide{display:none!important}
+.card{background:#fff8e7;border:5px solid #8b5a2b;border-radius:22px;padding:18px 24px;max-width:min(520px,88vw);max-height:90vh;overflow:auto;text-align:center;color:#4a3320;box-shadow:0 10px 0 #5e3b1a}
+.sub{font-size:15px;color:#9a7a55}
+h1{font-size:46px;margin:2px 0 8px;color:#2f5d46;letter-spacing:2px}
+h2{font-size:30px;margin:4px 0 10px;color:#2f5d46}
+.rules{text-align:left;margin:0 0 10px;padding-left:20px;font-size:17px;line-height:1.55}
+.rules b{color:#c0392b}
+.how{font-size:15px;color:#7a5a38;margin-bottom:10px}
+.btn{font-family:inherit;font-size:22px;padding:11px 22px;border:none;border-radius:14px;margin:6px;cursor:pointer;background:#f2b134;color:#4a3320;box-shadow:0 5px 0 #b77d12}
+.btn:active{transform:translateY(3px);box-shadow:0 2px 0 #b77d12}
+.btn.gray{background:#d8d2c6;box-shadow:0 5px 0 #a9a196;color:#8a8275;cursor:default}
+.btn.gray:active{transform:none;box-shadow:0 5px 0 #a9a196}
+.best{font-size:15px;color:#9a7a55;margin-top:8px}
+#resList,#lbList{margin:6px 0 12px;font-size:18px}
+#lbList .row{padding:4px 10px;font-size:16px}
+#lbInfo{font-size:16px;color:#7a5a38;min-height:22px}
+.btn:disabled{opacity:.6}
+.row{display:flex;justify-content:space-between;gap:10px;padding:6px 10px;border-bottom:2px dashed #e3cfa8}
+.row.me{background:#ffe9a8;border-radius:10px}
+.row .st{color:#9a7a55}
+#resWhy{font-size:15px;color:#7a5a38}
+#snd{position:absolute;bottom:10px;right:10px;z-index:4;display:flex;gap:6px}
+#snd button{font-family:inherit;font-size:17px;border:none;border-radius:12px;padding:6px 12px;background:rgba(255,248,231,.92);color:#4a3320;cursor:pointer}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="game"></canvas>
+
+  <div id="title" class="ov"><div class="card">
+    <div class="sub">쉬는시간 오락실 · 눈치 서바이벌</div>
+    <h1>쪽지 돌리기</h1>
+    <ul class="rules">
+      <li>쪽지를 받으면 <b>1초</b> 동안 읽어야 넘길 수 있어요.</li>
+      <li>선생님이 뒤돌 때 쪽지를 든 사람은 <b>바로 복도로!</b></li>
+      <li>날아가는 쪽지가 걸리면 <b>던진 사람</b>이 걸려요.</li>
+      <li>분필 소리·헛기침·어깨를 잘 보세요. 가끔 <b>속임수</b>도 있어요.</li>
+      <li>마지막까지 살아남으면 우승! 쪽지를 오래 들수록 <b>낙서 점수</b>가 쌓여요.</li>
+    </ul>
+    <div class="how">조작: 초록색으로 빛나는 옆자리 책상을 터치 · PC는 방향키</div>
+    <button class="btn" id="btnSolo">혼자 하기</button><button class="btn" id="btnMulti">같이 하기</button>
+    <div class="best" id="best"></div>
+  </div></div>
+
+  <div id="out" class="ov soft hide"><div class="card">
+    <h2>복도로 쫓겨났어요!</h2>
+    <div id="outRank"></div>
+    <button class="btn" id="btnWatch">관전하기</button><button class="btn" id="btnRetry1">다시 하기</button>
+  </div></div>
+
+  <div id="lobby" class="ov hide"><div class="card">
+    <h2 id="lbTitle">친구를 찾는 중…</h2>
+    <div id="lbInfo"></div>
+    <div id="lbList"></div>
+    <button class="btn hide" id="btnReady">준비 완료</button><button class="btn" id="lbSolo">혼자 하기로</button><button class="btn" id="btnLeave">나가기</button>
+  </div></div>
+
+  <div id="result" class="ov hide"><div class="card">
+    <h2 id="resTitle"></h2>
+    <div id="resWhy"></div>
+    <div id="resList"></div>
+    <button class="btn" id="btnRetry">다시 하기</button><button class="btn" id="btnHome">처음으로</button>
+  </div></div>
+
+  <div id="snd"><button id="music">음악 켬</button><button id="mute">소리 켬</button></div>
+</div>
+<script src="sound.js"></script>
+<script src="ai.js"></script>
+<script src="game.js"></script>
+<script src="net.js"></script>
+<script src="../common/arcade.js" defer></script>
+</body>
+</html>
