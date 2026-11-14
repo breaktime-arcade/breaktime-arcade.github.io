@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#15131e">
+  <meta name="description" content="100점으로 다섯 번의 비밀 경매에 도전하세요. 친구와 실시간으로 즐기는 쉬는시간 오락실의 무료 웹게임.">
+  <title>100점 비밀 경매 | 쉬는시간 오락실</title>
+  <style>
+    :root{color-scheme:dark;--bg:#15131e;--card:#211d2b;--edge:#3c3449;--text:#fff1db;--muted:#bdb1ca;--gold:#ffcb72;--mint:#99e7ce;--ink:#291b1c;--red:#ffaaa6;font-family:"Malgun Gothic","Apple SD Gothic Neo",system-ui,sans-serif}
+    *{box-sizing:border-box} [hidden]{display:none!important}
+    body{margin:0;background:radial-gradient(ellipse at 44% -14%,#463044 0,transparent 50%),var(--bg);color:var(--text);line-height:1.55}
+    button,input,textarea{font:inherit} button,a,input{touch-action:manipulation} button{cursor:pointer} button:disabled{cursor:default;opacity:.48}
+    a{color:var(--gold)} :focus-visible{outline:3px solid var(--mint);outline-offset:3px}
+    .shell{width:min(100% - 30px,920px);margin:auto}.bar{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:14px 0;border-bottom:1px solid #ffdead26}
+    .brand{color:var(--text);text-decoration:none;font-size:.82rem;font-weight:800}.brand-mark{color:var(--gold);margin-right:5px}.actions,.row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.spread{justify-content:space-between}
+    .button,.icon,.lot{color:var(--text);border:1px solid var(--edge);background:#2d2637;border-radius:11px;min-height:44px;font-weight:750;padding:9px 14px}
+    .button:hover:not(:disabled),.icon:hover,.lot:hover:not(:disabled){border-color:var(--gold)}.button.primary{background:var(--gold);color:var(--ink);border-color:var(--gold);box-shadow:0 3px 0 #a67844}.icon{min-width:44px;padding:4px 8px;font-size:.78rem}.wide{width:100%}
+    .main{padding:18px 0 30px;min-height:570px}.hero{position:relative;isolation:isolate;overflow:hidden;display:grid;grid-template-columns:1.15fr .85fr;align-items:center;gap:12px;padding:30px clamp(16px,5vw,46px);border:1px solid #7e5870;border-radius:20px;background:linear-gradient(115deg,#302033 5%,#472c43 62%,#6c4050);box-shadow:0 12px 30px #09060e72}
+    .hero::before{position:absolute;inset:0;z-index:-1;content:"";background:repeating-linear-gradient(125deg,transparent 0 13px,#ffdebc08 14px 15px),radial-gradient(circle at 77% 55%,#ffc17942,transparent 53%)}
+    .eyebrow{margin:0 0 6px;font-size:.75rem;letter-spacing:.13em;font-weight:850;color:var(--gold)}
+    h1,h2,h3,p{margin:0} h1{font-size:clamp(2rem,6.6vw,4.1rem);line-height:1.06;letter-spacing:-.075em} h1 span{color:var(--gold);display:block} h2{font-size:clamp(1.3rem,4.5vw,1.75rem);letter-spacing:-.05em;line-height:1.3} h3{font-size:1rem} .hero p.copy{margin:12px 0 18px;color:#f0d9df;font-size:.9rem;word-break:keep-all}
+    .tokens{height:184px;position:relative;display:grid;place-items:center;user-select:none}.coin{position:absolute;display:grid;place-items:center;height:86px;aspect-ratio:1;border-radius:50%;color:#7a3d29;border:5px double #8f4e35;background:repeating-conic-gradient(from 0deg,#ffe3a627 0deg 8deg,transparent 9deg 19deg),radial-gradient(circle at 35% 27%,#fff0ae,#e79053);text-shadow:0 1px #ffebad;box-shadow:0 8px 0 #a45136,0 12px 16px #170d20aa;font-size:1.45rem;font-weight:950}.coin.one{transform:translate(-54px,23px) rotate(-16deg);background-color:#e68964}.coin.two{transform:translate(53px,15px) rotate(16deg)}.coin.big{height:121px;transform:translateY(-14px) rotate(-8deg);font-size:2.3rem}
+    .grid-home{display:grid;grid-template-columns:1.05fr .95fr;gap:12px;margin-top:12px}.panel{background:var(--card);border:1px solid var(--edge);border-radius:15px;padding:15px}.stack>*+*{margin-top:11px}.muted,.help{color:var(--muted);font-size:.82rem;word-break:keep-all}.code{letter-spacing:.16em;font-family:ui-monospace,"Cascadia Mono",monospace}.field{background:#171422;border:1px solid #5c4d65;color:var(--text);border-radius:10px;padding:8px 11px;min-height:44px}.join input{width:121px;text-transform:uppercase}.join{align-items:end}.join label{display:grid;gap:4px;font-size:.75rem;color:var(--muted)}
+    .notice{margin-bottom:10px;padding:9px 13px;border:1px solid #ad605f;background:#402b39;border-radius:10px;color:#ffd9cb;font-size:.84rem}.notice[data-kind="info"]{border-color:#5f967f;background:#213534;color:#cbf6e7}
+    .room-tag{font-size:.76rem;color:var(--mint);font-weight:800}.seats{list-style:none;padding:0;margin:11px 0;display:grid;grid-template-columns:repeat(4,1fr);gap:7px}.seat{min-width:0;padding:7px 9px;background:#292436;border:1px solid var(--edge);border-radius:8px;font-size:.77rem;overflow-wrap:anywhere}.seat.empty{color:#a295af;background:#1a1723;border-style:dashed}.seat.offline{color:#b7aabf}.dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--mint);margin-right:6px}.offline .dot{background:#8b7c96}
+    .game-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(195px,.32fr);align-items:start;gap:12px}.statusline{display:flex;align-items:center;justify-content:space-between;gap:8px}.statusline .count{font-size:1.45rem;font-weight:900;font-variant-numeric:tabular-nums;color:var(--gold);white-space:nowrap}.count.rush{color:var(--red)}
+    .progress{height:5px;border-radius:10px;background:#493a50;overflow:hidden;margin:8px 0 11px}.progress span{display:block;width:100%;height:100%;transform-origin:left;background:var(--gold);transition:transform .12s linear}.stats{display:flex;gap:7px;flex-wrap:wrap;margin:8px 0 11px}.stat{font-size:.74rem;color:var(--muted);border:1px solid #57465e;border-radius:8px;padding:4px 8px}.stat b{color:var(--gold);font-size:.9rem;margin-left:4px}
+    .lots{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.lot{position:relative;min-width:0;padding:8px 5px;display:grid;justify-items:center;align-content:center;text-align:center;gap:3px;min-height:105px;background:radial-gradient(ellipse at 50% 10%,var(--glow),transparent 80%),#2c2639}.lot .item{font-size:clamp(1.4rem,6vw,2.3rem);line-height:1.12}.lot .item-name{font-size:clamp(.69rem,2.9vw,.85rem);word-break:keep-all}.lot .value{font-size:.72rem;color:var(--gold)}.lot.is-picked{border-color:var(--gold);box-shadow:inset 0 0 0 1px var(--gold)}.lot:disabled{opacity:1;cursor:default}.lot:nth-child(1){--glow:#47776976}.lot:nth-child(2){--glow:#466aa37a}.lot:nth-child(3){--glow:#a765438a}
+    .bid-panel{margin-top:10px;border-top:1px solid var(--edge);padding-top:9px}.bid-controls{display:grid;grid-template-columns:44px minmax(60px,95px) 44px minmax(44px,auto);gap:7px;margin:7px 0 9px}.bid-controls input{text-align:center;width:100%;appearance:textfield}.bid-controls input::-webkit-inner-spin-button{appearance:none}.bid-panel .decision{display:grid;grid-template-columns:1fr auto;gap:8px}.bid-panel label{font-size:.82rem;color:var(--muted)}.status-text{font-size:.84rem;color:var(--mint);min-height:1.4em}.status-text:empty{display:none}
+    .ranking{list-style:none;padding:0;margin:8px 0 0}.ranking li{display:grid;grid-template-columns:1.3em minmax(0,1fr) auto;gap:6px;align-items:center;padding:7px 4px;border-bottom:1px solid #ffead51a;font-size:.77rem}.ranking li:last-child{border-bottom:0}.ranking li.me{color:var(--mint)}.rank{color:var(--muted)}.score{text-align:right;color:var(--gold);white-space:nowrap;font-variant-numeric:tabular-nums}.ranking .cash{color:var(--muted);font-size:.67rem;display:block}.ranking .name{overflow-wrap:anywhere}
+    .result-list,.receipts{list-style:none;padding:0;margin:8px 0}.result-list li,.receipts li{padding:6px 0;font-size:.78rem;border-bottom:1px solid #ffe6d11c;overflow-wrap:anywhere}.result-list strong{color:var(--mint);margin-left:5px}.receipts{color:var(--muted)}.end{background:radial-gradient(ellipse at 0 0,#55404b,#282031 68%);border-color:#7b5770}.end h2{color:var(--gold)}
+    details summary{cursor:pointer;font-size:.8rem;color:var(--muted);padding:5px 0}.reveal{animation:reveal .35s ease-out}@keyframes reveal{from{transform:translateY(6px);opacity:.35}}
+    .footer{border-top:1px solid #ffdead26;padding:10px 0 22px}.footer textarea{display:block;width:100%;min-height:152px;margin:9px 0;resize:vertical;font:12px ui-monospace,monospace}.footer p{margin:5px 0}.footer .row a{font-size:.78rem}.small{font-size:.76rem}
+    @media(max-width:630px){.game-grid{grid-template-columns:1fr}.ranking{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:9px}.grid-home{grid-template-columns:1fr}.tokens{height:120px;transform:scale(.8);transform-origin:center}.hero{grid-template-columns:1.35fr .65fr;gap:1px}.coin.one{transform:translate(-34px,23px) rotate(-16deg)}.coin.two{transform:translate(31px,15px) rotate(16deg)}.coin.big{height:94px;font-size:1.85rem}.coin{height:65px}.panel{padding:12px}.main{padding-top:12px}}
+    @media(max-width:370px){.shell{width:calc(100% - 20px)}.hero{padding:15px 10px 15px 13px}.tokens{transform:scale(.67)}.seats{grid-template-columns:repeat(2,1fr)}.ranking{grid-template-columns:1fr}.bid-controls{grid-template-columns:42px minmax(48px,66px) 42px auto}.bid-controls button{padding-inline:6px}.actions{gap:5px}}
+    @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+  </style>
+  <script src="auction.js" defer></script>
+</head>
+<body>
+  <div class="shell">
+    <header class="bar">
+      <a class="brand" href="https://smile-willow.tistory.com/" target="_blank" rel="noopener"><span class="brand-mark" aria-hidden="true">◆</span>쉬는시간 오락실</a>
+      <div class="actions"><button class="icon" id="sound" type="button" aria-pressed="false">소리 켜기</button><button class="icon" id="fullscreen" type="button">전체 화면</button></div>
+    </header>
+    <main class="main" id="main">
+      <p class="notice" id="notice" role="status" hidden></p>
+      <div id="home">
+        <section class="hero" aria-labelledby="title">
+          <div><p class="eyebrow">실시간 경매 게임 · 2~8명</p><h1 id="title">100점<span>비밀 경매</span></h1><p class="copy">상품 셋 중 하나에 몰래 입찰하세요.<br>다섯 번의 경매가 끝나면 승점을 겨룹니다.</p><button class="button primary" id="public-room" type="button">공개 대기실 입장</button></div>
+          <div class="tokens" aria-hidden="true"><span class="coin one">10</span><span class="coin two">5</span><span class="coin big">100</span></div>
+        </section>
+        <div class="grid-home">
+          <section class="panel stack"><h2>친구와 함께 하기</h2><form class="row join" id="join"><label>방 코드<input class="field code" id="code" required minlength="6" maxlength="6" pattern="[A-Za-z0-9]{6}" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="예: M2T7KN"></label><button class="button" type="submit">입장하기</button><button class="button" id="create" type="button">방 만들기</button></form><p class="help">초대 링크를 열면 방 코드가 자동으로 입력됩니다.</p></section>
+          <section class="panel stack"><h2>혼자 연습하기</h2><p class="help">AI 참가자 3명과 대결하며 입찰 규칙을 익혀요.</p><button class="button" id="practice" type="button">연습 시작</button></section>
+        </div>
+        <details class="panel" style="margin-top:12px" open><summary>게임 방법</summary><p class="help">각자 예산 100점으로 시작합니다. 상품마다 가장 높은 금액을 쓴 한 명만 낙찰받고, 낙찰자만 예산을 씁니다. 최고액이 같으면 해당 상품은 유찰됩니다. 최종 승점이 같으면 남은 예산이 많은 사람이 앞섭니다.</p></details>
+      </div>
+      <section class="panel stack" id="lobby" aria-labelledby="lobby-title" hidden>
+        <div class="row spread"><div><p class="eyebrow">실시간 대기실</p><h2 id="lobby-title">방 <span class="code" id="room-code"></span></h2></div><button class="button" id="invite" type="button">초대 링크 복사</button></div>
+        <div class="row spread"><span id="lobby-state" class="room-tag" role="status"></span><span id="my-name" class="help"></span></div>
+        <ul class="seats" id="seats" aria-label="참가자 자리"></ul>
+        <p class="help" id="lobby-help">두 명 이상 접속하면 누구나 경매를 시작할 수 있어요.</p>
+        <div class="row"><button class="button primary" id="start" type="button" disabled>경매 시작</button><button class="button" id="shuffle" type="button">닉네임 바꾸기</button><button class="button" type="button" data-exit>나가기</button></div>
+      </section>
+      <div class="game-grid" id="game" hidden>
+        <section class="panel" aria-labelledby="stage-title">
+          <div class="statusline"><div><p class="eyebrow" id="round-label"></p><h2 id="stage-title"></h2></div><time class="count" id="count" aria-label="남은 시간"></time></div>
+          <div class="progress" id="progress" aria-hidden="true"><span></span></div>
+          <div class="stats" id="stats" hidden><span class="stat">내 예산 <b id="budget"></b></span><span class="stat">내 승점 <b id="points"></b></span></div>
+          <div id="stage" class="stack" aria-live="polite"></div>
+          <div class="lots" id="lots" role="group" aria-label="상품 선택" hidden></div>
+          <form class="bid-panel" id="bid-form" hidden>
+            <label for="amount">입찰 금액 <span id="chosen"></span></label>
+            <div class="bid-controls"><button class="button" id="less" type="button" aria-label="5점 내리기">−5</button><input class="field" id="amount" type="number" inputmode="numeric" min="1" max="100" step="1" value="10" required><button class="button" id="more" type="button" aria-label="5점 올리기">+5</button><button class="button" id="max" type="button">전액</button></div>
+            <div class="decision"><button class="button primary" id="submit-bid" type="submit">비밀 입찰 확정</button><button class="button" id="pass" type="button">기권</button></div>
+          </form>
+          <p class="status-text" id="bid-status" role="status"></p>
+        </section>
+        <aside class="panel stack"><div class="row spread"><h3 id="ranking-title">현재 순위</h3><span class="room-tag" id="mode"></span></div><ul class="ranking" id="ranking" aria-labelledby="ranking-title"></ul><div class="row"><button class="button small" id="game-invite" type="button">초대 링크</button><button class="button small" type="button" data-exit>나가기</button></div></aside>
+      </div>
+      <noscript><p>게임을 실행하려면 JavaScript를 켜 주세요.</p></noscript>
+    </main>
+    <footer class="footer"><details id="setup"><summary>사이트 운영자 설정</summary><p class="help">Realtime Database의 Rules 탭에 적용할 전체 규칙입니다. 질문에 제공된 퀴즈·땅따먹기 규칙과 경매 경로를 포함합니다. 콘솔 규칙에 이후 변경 사항이 있다면 최신 규칙에 <code>auctionV1</code> 항목만 추가하세요.</p><button class="button small" id="copy-rules" type="button">Firebase 규칙 복사</button><textarea class="field" id="rules" readonly aria-label="Firebase Realtime Database 규칙" spellcheck="false"></textarea></details></footer>
+  </div>
+</body>
+</html>
