@@ -21,6 +21,11 @@ button{font-family:inherit}
 .timer{margin-left:auto;display:flex;align-items:center;gap:6px;background:#2b2140;color:#fff;border-radius:999px;padding:4px 14px 4px 10px;font-weight:900;font-size:22px;min-width:92px;justify-content:center}
 .timer.hurry{background:#ff4d6d;animation:beat .5s infinite}
 @keyframes beat{50%{transform:scale(1.08)}}
+.blogbar{display:none;margin:0 0 8px;padding:8px 12px;border-radius:12px;background:#2b2140;color:#fff;text-decoration:none;font-size:14px;text-align:center}
+.blogbar b{color:#ffd23f}
+.blogbar.show{display:block}
+.morelink{display:block;margin-top:10px;font-size:14px;font-weight:700;color:#e0335a;text-decoration:none}
+:fullscreen body,body:fullscreen{overflow:auto}
 .icon-btn{border:0;background:#fff;width:38px;height:38px;border-radius:50%;cursor:pointer;font-size:17px;box-shadow:0 2px 0 rgba(0,0,0,.12);flex:none}
 .scorebar{display:flex;height:20px;border-radius:999px;overflow:hidden;background:#e9e2d6;box-shadow:inset 0 2px 3px rgba(0,0,0,.12);margin-bottom:8px}
 .scorebar i{display:block;height:100%;transition:width .3s ease;position:relative}
@@ -28,7 +33,8 @@ button{font-family:inherit}
 .boardwrap{position:relative;display:flex;justify-content:center}
 #board{display:block;border-radius:16px;background:#fff;box-shadow:0 6px 0 #e6dccb,0 12px 30px rgba(80,40,0,.15);touch-action:none;cursor:pointer}
 .banner{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;text-align:center;
-  font-weight:900;font-size:72px;color:#fff;-webkit-text-stroke:2px #2b2140;text-shadow:0 5px 0 #2b2140;opacity:0;line-height:1.1}
+  font-weight:900;font-size:72px;color:#fff;opacity:0;line-height:1.1;
+  text-shadow:2px 0 0 #2b2140,-2px 0 0 #2b2140,0 2px 0 #2b2140,0 -2px 0 #2b2140,2px 2px 0 #2b2140,-2px 2px 0 #2b2140,2px -2px 0 #2b2140,-2px -2px 0 #2b2140,0 6px 0 #2b2140}
 .banner.show{animation:ban .9s ease forwards}
 .banner.small{font-size:40px}
 @keyframes ban{0%{opacity:0;transform:scale(.4)}20%{opacity:1;transform:scale(1.15)}35%{transform:scale(1)}75%{opacity:1}100%{opacity:0;transform:scale(1.05)}}
@@ -97,9 +103,11 @@ button{font-family:inherit}
 </head>
 <body>
 <div id="app">
+  <a class="blogbar" id="blogBar" href="https://smile-willow.tistory.com/" target="_top">🕹 <b>쉬는시간 오락실</b>에서 더 많은 무료 게임 하기 →</a>
   <div class="top">
     <div class="brand">땅따먹기 <b>60초</b></div>
     <div class="timer" id="timer">⏱ <span id="tsec">60</span></div>
+    <button class="icon-btn" id="fsBtn" title="전체화면">⛶</button>
     <button class="icon-btn" id="muteBtn" title="소리 켜기/끄기">🔊</button>
   </div>
   <div class="scorebar" id="scorebar"></div>
