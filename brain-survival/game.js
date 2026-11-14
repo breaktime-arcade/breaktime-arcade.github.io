@@ -579,6 +579,24 @@ const BS = window.BS = {
   isMuted: () => muted
 };
 
+/* 블로그로 연결 + 전체화면 */
+let inFrame = true;
+try { inFrame = window.self !== window.top; } catch (e) { inFrame = true; }
+if (!inFrame) $('blogBar').classList.add('show');
+const fsEl = $('app');
+const fsOk = !!(document.fullscreenEnabled || document.webkitFullscreenEnabled);
+if (!fsOk) $('fsBtn').style.display = 'none';
+const isFs = () => !!(document.fullscreenElement || document.webkitFullscreenElement);
+$('fsBtn').onclick = () => {
+  try {
+    if (isFs()) (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+    else (fsEl.requestFullscreen || fsEl.webkitRequestFullscreen).call(fsEl);
+  } catch (e) {}
+};
+['fullscreenchange', 'webkitfullscreenchange'].forEach(ev => document.addEventListener(ev, () => {
+  $('fsBtn').textContent = isFs() ? '✕' : '⛶'; $('fsBtn').title = isFs() ? '전체화면 끄기' : '전체화면';
+}));
+
 setMute(muted);
 refreshBest();
 idleStage();
