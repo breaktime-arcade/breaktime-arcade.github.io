@@ -179,7 +179,7 @@ button{font-family:inherit}
 .stats div{background:rgba(255,255,255,.08);border-radius:10px;padding:8px 4px;font-size:12px;color:#cdb8ff}
 .stats b{display:block;font-size:22px;color:#fff;font-family:'Black Han Sans',sans-serif;font-weight:400}
 
-.nick{width:100%;padding:12px 14px;border-radius:12px;border:2px solid #8b5cff;background:#0d0726;color:#fff;font:700 18px 'Noto Sans KR',sans-serif;text-align:center;outline:none;margin:6px 0 4px}
+.nick{width:100%;font-family:'Black Han Sans',sans-serif!important;font-size:28px!important;color:#ffd84d!important;padding:12px 14px;border-radius:12px;border:2px solid #8b5cff;background:#0d0726;color:#fff;font:700 18px 'Noto Sans KR',sans-serif;text-align:center;outline:none;margin:6px 0 4px}
 .nick:focus{border-color:var(--gold)}
 .err{min-height:20px;color:#ff8a8a;font-size:13px;margin-bottom:8px}
 .cd{font-family:'Black Han Sans',sans-serif;font-size:40px;color:#7cff9b;min-height:8px;text-shadow:0 3px 0 #0a5a2a}
@@ -288,8 +288,9 @@ button{font-family:inherit}
   <div class="ov" id="ovNick">
     <div class="card">
       <div class="big" style="font-size:34px">함께 하기</div>
-      <div class="desc">블로그에 접속한 사람들과 <b style="color:#ffd23f">실시간으로</b> 같은 문제를 풀어요.<br>무대에서 쓸 닉네임을 정해 주세요.</div>
-      <input id="nickInput" class="nick" maxlength="8" placeholder="닉네임 (2~8글자)" autocomplete="off">
+      <div class="desc">블로그에 접속한 사람들과 <b style="color:#ffd23f">실시간으로</b> 같은 문제를 풀어요.<br>오늘 무대에서 쓸 닉네임이에요!</div>
+      <div class="nick" id="nickShow">…</div>
+      <button class="btn sub sm" id="nickRoll">🎲 다른 이름 뽑기</button>
       <div class="err" id="nickErr"></div>
       <button class="btn" id="nickOk">입장하기</button>
       <button class="btn sub" id="nickCancel">돌아가기</button>
