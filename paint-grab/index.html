@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<!-- 땅따먹기 60초 © 쉬는시간 오락실 (smile-willow.tistory.com) · 무단 복제·배포 금지 -->
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>땅따먹기 60초 - 실시간 색칠 땅따먹기</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@500;700;900&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;min-height:100%;font-family:'Noto Sans KR',sans-serif;color:#2b2140;
+  background:radial-gradient(circle at 10% 10%,#ffd6e7 0,transparent 35%),radial-gradient(circle at 90% 20%,#c9f2ff 0,transparent 35%),
+  radial-gradient(circle at 50% 100%,#fff1b8 0,transparent 45%),#fff7ee}
+button{font-family:inherit}
+#app{position:relative;max-width:640px;margin:0 auto;padding:10px 10px 14px;user-select:none;-webkit-user-select:none}
+.top{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.brand{font-weight:900;font-size:22px;letter-spacing:-.5px;white-space:nowrap}
+.brand b{color:#ff4d6d}
+.timer{margin-left:auto;display:flex;align-items:center;gap:6px;background:#2b2140;color:#fff;border-radius:999px;padding:4px 14px 4px 10px;font-weight:900;font-size:22px;min-width:92px;justify-content:center}
+.timer.hurry{background:#ff4d6d;animation:beat .5s infinite}
+@keyframes beat{50%{transform:scale(1.08)}}
+.icon-btn{border:0;background:#fff;width:38px;height:38px;border-radius:50%;cursor:pointer;font-size:17px;box-shadow:0 2px 0 rgba(0,0,0,.12);flex:none}
+.scorebar{display:flex;height:20px;border-radius:999px;overflow:hidden;background:#e9e2d6;box-shadow:inset 0 2px 3px rgba(0,0,0,.12);margin-bottom:8px}
+.scorebar i{display:block;height:100%;transition:width .3s ease;position:relative}
+.scorebar i.me::after{content:'';position:absolute;inset:0;border:2px solid #fff;border-radius:3px}
+.boardwrap{position:relative;display:flex;justify-content:center}
+#board{display:block;border-radius:16px;background:#fff;box-shadow:0 6px 0 #e6dccb,0 12px 30px rgba(80,40,0,.15);touch-action:none;cursor:pointer}
+.banner{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;text-align:center;
+  font-weight:900;font-size:72px;color:#fff;-webkit-text-stroke:2px #2b2140;text-shadow:0 5px 0 #2b2140;opacity:0;line-height:1.1}
+.banner.show{animation:ban .9s ease forwards}
+.banner.small{font-size:40px}
+@keyframes ban{0%{opacity:0;transform:scale(.4)}20%{opacity:1;transform:scale(1.15)}35%{transform:scale(1)}75%{opacity:1}100%{opacity:0;transform:scale(1.05)}}
+.toasts{position:absolute;left:0;right:0;top:8px;display:flex;flex-direction:column;align-items:center;gap:4px;pointer-events:none;z-index:3}
+.toast{background:rgba(43,33,64,.88);color:#fff;font-weight:700;font-size:13px;padding:4px 12px;border-radius:999px;animation:toast 2.2s ease forwards}
+@keyframes toast{0%{opacity:0;transform:translateY(-6px)}10%,80%{opacity:1;transform:none}100%{opacity:0}}
+.status{display:flex;align-items:center;justify-content:center;gap:8px;min-height:30px;margin:10px 0 6px;font-size:14px;font-weight:700;color:#5b4d72;text-align:center}
+.badge{display:inline-flex;align-items:center;gap:3px;background:#2b2140;color:#fff;border-radius:999px;padding:2px 10px;font-size:13px}
+.badge.bolt{background:#ffb703;color:#2b2140}.badge.shield{background:#3a86ff}
+.players{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.pc{display:flex;align-items:center;gap:6px;background:#fff;border-radius:10px;padding:6px 8px;font-size:13px;font-weight:700;box-shadow:0 2px 0 rgba(0,0,0,.08);min-width:0}
+.pc .dot{width:14px;height:14px;border-radius:50%;flex:none;box-shadow:inset 0 -2px 0 rgba(0,0,0,.2)}
+.pc .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0}
+.pc .pct{color:#7a6c90;font-size:12px}
+.pc.me{outline:3px solid #ffd23f}
+.pc.human .nm::after{content:' 👤';font-size:10px}
+
+/* 오버레이 */
+.ov{position:fixed;inset:0;z-index:20;display:none;align-items:center;justify-content:center;background:rgba(43,33,64,.55);backdrop-filter:blur(3px);padding:12px}
+.ov.show{display:flex}
+.card{width:100%;max-width:420px;max-height:96vh;overflow:auto;text-align:center;border-radius:20px;padding:20px 20px 18px;background:#fff;border:4px solid #2b2140;box-shadow:0 8px 0 #2b2140;animation:pop .3s ease}
+@keyframes pop{0%{transform:scale(.88);opacity:0}100%{transform:none;opacity:1}}
+.logo{font-weight:900;font-size:40px;line-height:1.1;letter-spacing:-1px}
+.logo span{display:inline-block}
+.logo .c1{color:#ff4d6d}.logo .c2{color:#3a86ff}.logo .c3{color:#2ec27e}.logo .c4{color:#ffb703}
+.logo small{display:block;font-size:16px;color:#7a6c90;font-weight:700;letter-spacing:0;margin-top:4px}
+.rules{margin:14px 0 10px;padding:10px 14px;border-radius:12px;background:#fff7ee;text-align:left;font-size:14px;line-height:1.75;word-break:keep-all}
+.rules b{color:#ff4d6d}
+.seg{display:flex;gap:6px;justify-content:center;margin:8px 0 12px}
+.seg button{border:2px solid #2b2140;background:#fff;border-radius:999px;padding:5px 14px;font-weight:700;font-size:14px;cursor:pointer}
+.seg button.on{background:#2b2140;color:#fff}
+.btn{display:inline-block;border:3px solid #2b2140;cursor:pointer;border-radius:14px;padding:10px 22px;margin:4px;font-size:17px;font-weight:900;color:#2b2140;background:#ffd23f;box-shadow:0 4px 0 #2b2140;transition:transform .08s}
+.btn:active{transform:translateY(3px);box-shadow:0 1px 0 #2b2140}
+.btn.pink{background:#ff7aa2}.btn.blue{background:#8ecbff}.btn.white{background:#fff}
+.btn.sm{font-size:15px;padding:8px 16px}
+.best{font-size:13px;color:#7a6c90;margin:4px 0 8px}
+.big{font-weight:900;font-size:38px;margin:2px 0 6px}
+.desc{font-size:15px;line-height:1.6;color:#4a3d60;margin:6px 0 12px;word-break:keep-all}
+.nick{font-weight:700;font-size:24px;letter-spacing:1px;color:#2b2140;background:#fff7ee;border:3px dashed #2b2140;border-radius:14px;padding:10px;margin:8px 0}
+.err{min-height:20px;color:#e23b3b;font-size:13px;margin:4px 0}
+.cd{font-weight:900;font-size:34px;color:#2ec27e;min-height:6px}
+.chips{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin:10px 0;max-height:140px;overflow:auto}
+.chips span{background:#eef6ff;border:2px solid #8ecbff;border-radius:999px;padding:3px 10px;font-size:13px;font-weight:700}
+.chips span.ready{background:#dff8e7;border-color:#2ec27e}
+.chips span.me{border-color:#2b2140}
+.hint{font-size:12px;color:#8a7ca0;margin:4px 0 10px}
+.rank{list-style:none;margin:10px 0 14px;padding:0;text-align:left}
+.rank li{display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:10px;font-weight:700;font-size:15px}
+.rank li:nth-child(odd){background:#fff7ee}
+.rank li.me{outline:3px solid #ffd23f}
+.rank .no{width:26px;font-weight:900}
+.rank .dot{width:16px;height:16px;border-radius:50%}
+.rank .nm{flex:1}
+.rank .pc2{font-weight:900}
+.onbar{position:fixed;left:50%;bottom:10px;transform:translateX(-50%);z-index:15;display:none;align-items:center;gap:10px;background:#2b2140;color:#fff;border-radius:999px;padding:6px 6px 6px 14px;font-size:13px;font-weight:700}
+.onbar.show{display:flex}
+.onbar button{border:0;border-radius:999px;padding:5px 12px;font-weight:900;background:#ffd23f;color:#2b2140;cursor:pointer}
+@media (max-width:520px){
+  .brand{font-size:19px}
+  .timer{font-size:19px;min-width:80px}
+  .players{grid-template-columns:repeat(2,1fr)}
+  .banner{font-size:56px}
+  .logo{font-size:34px}
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="top">
+    <div class="brand">땅따먹기 <b>60초</b></div>
+    <div class="timer" id="timer">⏱ <span id="tsec">60</span></div>
+    <button class="icon-btn" id="muteBtn" title="소리 켜기/끄기">🔊</button>
+  </div>
+  <div class="scorebar" id="scorebar"></div>
+  <div class="boardwrap" id="boardwrap">
+    <canvas id="board"></canvas>
+    <div class="toasts" id="toasts"></div>
+    <div class="banner" id="banner"></div>
+  </div>
+  <div class="status" id="status">내 땅에 붙은 칸을 눌러 칠하세요!</div>
+  <div class="players" id="players"></div>
+
+  <div class="onbar" id="onBar"><span id="onBarTxt">관전 중</span><button id="onBarLeave">나가기</button></div>
+</div>
+
+<!-- 시작 화면 -->
+<div class="ov show" id="ovTitle">
+  <div class="card">
+    <div class="logo"><span class="c1">땅</span><span class="c2">따</span><span class="c3">먹</span><span class="c4">기</span> 60초<small>내 색으로 판을 물들여라!</small></div>
+    <div class="rules">
+      🎨 <b>내 땅에 붙은 칸</b>을 눌러 내 색으로 칠해요.<br>
+      👆 꾹 누른 채 <b>쓱 문지르면</b> 연달아 칠해져요.<br>
+      ⚔️ 남의 땅도 빼앗을 수 있어요!<br>
+      💣 폭탄 3×3 · ⚡ 번개 빠르게 · 🛡️ 방패 보호<br>
+      ⏱ <b>60초 뒤</b> 가장 넓은 땅을 가진 사람이 우승!
+    </div>
+    <div class="seg" id="diffSeg">
+      <button data-d="easy">쉬움</button><button data-d="normal" class="on">보통</button><button data-d="hard">어려움</button>
+    </div>
+    <div class="best" id="bestTxt"></div>
+    <button class="btn" id="soloBtn">혼자 하기</button>
+    <button class="btn pink" id="onlineBtn">함께 하기 (실시간)</button>
+  </div>
+</div>
+
+<!-- 함께 하기: 닉네임 -->
+<div class="ov" id="ovNick">
+  <div class="card">
+    <div class="big" style="font-size:30px">함께 하기</div>
+    <div class="desc">블로그에 접속한 사람들과 <b style="color:#ff4d6d">실시간으로</b> 땅을 다퉈요!<br>오늘 쓸 닉네임이에요.</div>
+    <div class="nick" id="nickShow">…</div>
+    <button class="btn white sm" id="nickRoll">🎲 다른 이름 뽑기</button>
+    <div class="err" id="nickErr"></div>
+    <button class="btn" id="nickOk">입장하기</button>
+    <button class="btn blue" id="nickCancel">돌아가기</button>
+  </div>
+</div>
+
+<!-- 함께 하기: 대기실 -->
+<div class="ov" id="ovLobby">
+  <div class="card">
+    <div class="big" style="font-size:28px">🎨 실시간 대기실</div>
+    <div class="desc" id="lobbyMsg">연결 중…</div>
+    <div class="cd" id="lobbyCd"></div>
+    <div class="chips" id="lobbyList"></div>
+    <div class="hint">한 판에 최대 8명! 사람이 적으면 AI가 함께해요.</div>
+    <button class="btn pink sm" id="lobbyReady">준비 완료!</button><br>
+    <button class="btn blue sm" id="lobbySolo">혼자 하기로 바꾸기</button>
+    <button class="btn sm" id="lobbyLeave">나가기</button>
+  </div>
+</div>
+
+<!-- 결과 -->
+<div class="ov" id="ovResult">
+  <div class="card">
+    <div class="big" id="resTitle">우승!</div>
+    <div class="desc" id="resDesc"></div>
+    <ul class="rank" id="resRank"></ul>
+    <div class="best" id="resBest"></div>
+    <div id="resBtns"></div>
+  </div>
+</div>
+
+<script src="game.js"></script>
+<script src="firebase-config.js"></script>
+<script src="online.js"></script>
+</body>
+</html>
