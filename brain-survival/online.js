@@ -14,7 +14,7 @@ if (!BS) return;
 const $ = id => document.getElementById(id);
 const SDK = 'https://www.gstatic.com/firebasejs/10.12.2/';
 const TOTAL = BS.TOTAL, MAXQ = BS.MAXQ;
-const WAIT_MS = window.BS_WAIT_MS || 30000;      // 2명 이상 모이면 시작까지 대기
+const WAIT_MS = window.BS_WAIT_MS || 10000;      // 2명 이상 모이면 시작까지 대기
 const HB_STALE = 7000;      // 호스트 응답이 이 시간 넘게 없으면 교체
 const BAN = ['씨발','시발','ㅅㅂ','병신','ㅂㅅ','개새','좆','존나','미친','fuck','shit','sex','섹스','운영자','관리자','admin'];
 
@@ -85,7 +85,7 @@ async function connect() {
   const pRef = db.ref('presence/' + uid);
   db.ref('.info/connected').on('value', s => {
     connected = !!s.val();
-    if (connected) { pRef.onDisconnect().remove(); pRef.set({ nick, t: firebase.database.ServerValue.TIMESTAMP }); }
+    if (connected) { pRef.onDisconnect().remove(); pRef.set({ nick, t: firebase.database.ServerValue.TIMESTAMP, ready: false }); }
   });
   db.ref('presence').on('value', s => { presence = s.val() || {}; renderLobby(); });
   db.ref('show').on('value', s => { show = s.val(); onShow(); });
@@ -113,6 +113,13 @@ function leave(silent) {
   BS.mode = 'single';
 }
 $('lobbyLeave').onclick = () => leave();
+$('lobbyReady').onclick = () => {
+  if (!db || !uid || !presence[uid]) return;
+  const r = !presence[uid].ready;
+  db.ref('presence/' + uid + '/ready').set(r);
+  if (r) BS.SFX.click();
+};
+function clearReady() { if (db && uid && presence[uid] && presence[uid].ready) db.ref('presence/' + uid + '/ready').set(false); }
 $('onBarLeave').onclick = () => leave();
 $('finLeave').onclick = () => leave();
 $('lobbySolo').onclick = () => { leave(true); BS.mode = 'single'; $('startBtn').click(); };
@@ -153,7 +160,7 @@ function drive(t) {
       break;
     case 'countdown':
       if (humans.length < 2) up({ phase: 'lobby', until: null });
-      else if (t >= s.until || humans.length >= TOTAL) startRound(t, s);
+      else if (t >= s.until || humans.length >= TOTAL || humans.every(u => presence[u] && presence[u].ready)) startRound(t, s);
       break;
     case 'opening':
       if (t >= s.until) nextQuestion(t, s);
@@ -245,13 +252,19 @@ function showLobby(on) { $('ovLobby').classList.toggle('show', on); }
 function renderLobby() {
   if (BS.mode !== 'online') return;
   const list = Object.entries(presence).sort((a, b) => (a[1].t || 0) - (b[1].t || 0));
-  $('lobbyList').innerHTML = list.map(([u, p]) => `<span class="${u === uid ? 'me' : ''}">${BS.esc(p.nick || '?')}</span>`).join('');
+  $('lobbyList').innerHTML = list.map(([u, p]) => `<span class="${u === uid ? 'me' : ''}${p.ready ? ' ready' : ''}">${p.ready ? '✓ ' : ''}${BS.esc(p.nick || '?')}</span>`).join('');
   const ph = show && show.phase;
-  const n = list.length;
+  const n = list.length, rn = list.filter(([, p]) => p.ready).length;
+  const mine = presence[uid];
+  const inLobby = !ph || ph === 'lobby' || ph === 'countdown';
+  const rb = $('lobbyReady');
+  rb.style.display = inLobby ? '' : 'none';
+  rb.textContent = mine && mine.ready ? '준비 취소' : '준비 완료!';
+  rb.className = 'btn sm ' + (mine && mine.ready ? 'sub' : 'pink');
   let msg;
-  if (ph === 'countdown') msg = `<b style="color:#7cff9b">${n}명</b>이 모였어요! 곧 방송이 시작됩니다.`;
+  if (ph === 'countdown') msg = `<b style="color:#7cff9b">${n}명</b>이 모였어요! 준비 <b style="color:#ffd23f">${rn}/${n}</b><br>모두 '준비 완료'를 누르면 바로 시작해요.`;
   else if (ph && !['lobby', 'countdown'].includes(ph)) msg = `지금 방송이 진행 중이에요. 끝나면 다음 회차에 함께 참가해요!<br>(접속 중 ${n}명)`;
-  else msg = n >= 2 ? `<b style="color:#7cff9b">${n}명</b> 접속 중` : '다른 참가자를 기다리고 있어요…<br><b style="color:#ffd23f">2명 이상</b> 모이면 30초 뒤에 방송이 시작돼요.<br>친구에게 이 페이지를 알려 주세요!';
+  else msg = n >= 2 ? `<b style="color:#7cff9b">${n}명</b> 접속 중` : '다른 참가자를 기다리고 있어요…<br><b style="color:#ffd23f">2명 이상</b> 모이면 10초 뒤에 방송이 시작돼요.<br>친구에게 이 페이지를 알려 주세요!';
   $('lobbyMsg').innerHTML = msg;
 }
 const slotOfUid = u => cs.findIndex(c => c.uid === u);
@@ -310,6 +323,7 @@ function enter(ph) {
   if (!s.cast) return;
   if (ph === 'opening') {
     $('ovFinal').classList.remove('show');
+    clearReady();
     const h = s.cast.filter(c => !c.ai).length;
     BS.updateAliveN(aliveN());
     BS.el.chip.textContent = '실시간 방송'; BS.el.chip.style.background = '#ff4fa3';
