@@ -28,18 +28,19 @@ export class UI {
       <div class="hud-c"><div class="score" id="h-score">0</div><div class="combo" id="h-combo"></div></div>
       <div class="hud-r"><div class="hearts glass" id="h-hearts"></div>
         <button class="ib glass" id="b-sound" title="소리">🔊</button><button class="ib glass" id="b-guide" title="근무 수칙">📖</button><button class="ib glass" id="b-pause" title="일시정지">⏸</button></div>
-      <div class="zoom"><button class="ib glass" id="b-zin">＋</button><button class="ib glass" id="b-zout">－</button></div>
-      <div class="tip" id="h-tip">위험한 이용객을 눌러 대응 도구를 고르세요 · 드래그로 둘러보기 · 휠/두 손가락으로 망원경</div>`;
+      <div class="zoom"><button class="ib glass post" id="b-post" title="반대편 감시대로 이동 (C)">🔄</button><button class="ib glass" id="b-zin">＋</button><button class="ib glass" id="b-zout">－</button></div>
+      <div class="tip" id="h-tip">위험한 이용객을 눌러 대응 도구를 고르세요 · 드래그로 둘러보기 · 휠/두 손가락으로 망원경 · 🔄 반대편 감시대</div>`;
   }
 
   _bind() {
     const g = this.g;
     $('#b-sound').onclick = () => { g.audio.setMuted(!g.audio.muted); $('#b-sound').textContent = g.audio.muted ? '🔇' : '🔊'; };
     $('#b-pause').onclick = () => g.togglePause();
+    $('#b-post').onclick = () => g.switchPost();
     $('#b-guide').onclick = () => { if (g.state === 'play') g.togglePause(true); this.showGuide(() => this.showPause()); };
     $('#b-zin').onclick = () => g.zoomBy(0.7);
     $('#b-zout').onclick = () => g.zoomBy(1 / 0.7);
-    for (const b of ['#b-sound', '#b-pause', '#b-guide', '#b-zin', '#b-zout']) { $(b).addEventListener('pointerdown', (e) => e.stopPropagation()); }
+    for (const b of ['#b-post', '#b-sound', '#b-pause', '#b-guide', '#b-zin', '#b-zout']) { $(b).addEventListener('pointerdown', (e) => e.stopPropagation()); }
   }
 
   hud(show) { $('#hud').classList.toggle('hidden', !show); }
@@ -114,6 +115,7 @@ export class UI {
       const cx = g.W / 2, cy = g.H / 2, dx = x - cx, dy = y - cy;
       const k = Math.min((cx - m) / Math.abs(dx || 1), (cy - m) / Math.abs(dy || 1));
       a.style.transform = `translate(${cx + dx * k}px,${cy + dy * k}px) translate(-50%,-50%) rotate(${Math.atan2(dy, dx)}rad)`;
+      a.firstChild.style.rotate = `${-Math.atan2(dy, dx)}rad`;
     }
     for (const [inc, a] of this.arrows) if (!seen.has(inc)) { a.remove(); this.arrows.delete(inc); }
     if (this.radialP) this._placeRadial();
@@ -202,6 +204,7 @@ export class UI {
         <p>⚠️ 구명조끼를 입고 웃으며 팔을 흔드는 사람은 <b>장난</b>일 수 있어요. 잘못 지적하면 감점!</p>
         <p>⏱️ 오래 방치하면 머리 위에 <b style="color:#ff3b30">!</b> 표시가 뜨고, 더 늦으면 사고가 나요.</p>
         <p>🖱️ 사람을 눌러 도구 선택 · 드래그로 둘러보기 · 휠/두 손가락으로 망원경 · 숫자키 1~5</p>
+        <p>🔄 버튼(또는 C키)으로 <b>왼쪽·오른쪽 감시대</b>를 오가며 멀리 있는 곳을 살피세요.</p>
       </div>
       <div class="btns"><button class="big primary" id="g-back">확인</button></div>`, 'guide');
     s.querySelector('#g-back').onclick = back;

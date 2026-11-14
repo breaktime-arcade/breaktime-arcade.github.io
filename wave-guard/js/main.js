@@ -38,7 +38,8 @@ class Game {
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(50, 1, 0.1, 6000);
     this.camBase = new THREE.Vector3(0, 10.5, 14);
-    this.cam = { yaw: 0, pitch: -0.36, fov: 50, tyaw: 0, tpitch: -0.36, tfov: 50 };
+    this.cam = { yaw: 0, pitch: -0.2, fov: 58, tyaw: 0, tpitch: -0.2, tfov: 58, base: 0 };
+    this.camTarget = new THREE.Vector3(); this.post = 0; this.guards = [];
     this.world = new World(r, this.scene, this.q);
     this.people = new People(this.scene, this.world, 96);
     this.audio = new Audio();
@@ -57,6 +58,7 @@ class Game {
     this._resize(); addEventListener('resize', () => this._resize());
     this._input();
     this._setupScene(0, 22);
+    this.setPost(0, true);
     this.ui.showTitle();
     this.clock = new THREE.Clock();
     this.renderer.setAnimationLoop(() => this._frame());
@@ -67,8 +69,8 @@ class Game {
     const w = this.W = innerWidth, h = this.H = innerHeight;
     this.renderer.setSize(w, h); this.composer.setSize(w, h);
     this.camera.aspect = w / h;
-    this.maxFov = w / h < 0.9 ? 72 : 55;
-    this.baseFov = w / h < 0.9 ? 66 : 50;
+    this.maxFov = w / h < 0.9 ? 86 : 72;
+    this.baseFov = w / h < 0.9 ? 74 : 58;
     if (!this._sized) { this.cam.fov = this.cam.tfov = this.baseFov; this._sized = true; }
     this.cam.tfov = Math.min(this.cam.tfov, this.maxFov);
     this.camera.updateProjectionMatrix();
@@ -79,8 +81,10 @@ class Game {
   // ---------- 장면 구성 ----------
   _setupScene(shiftIdx, count) {
     this.people.clear(); this.inc.clear(); this.ui.clearWorld(); this.fx = [];
-    for (const ch of this.world.chairs) {
+    this.guards = [];
+    for (const [ci, ch] of this.world.chairs.entries()) {
       const g = this.people.spawn({ staff: 'guard', x: ch.x, z: ch.z, head: ch.head });
+      this.guards[ci] = g; g.hidden = ci === this.post;
       g.seatY = ch.seatY; g.pinned = true;
       g.setSeq([{ t: 'upd', f: (q) => { q.pose = 'chair'; return false; } }]);
     }
@@ -132,7 +136,7 @@ class Game {
     this._setupScene(n, Math.round(cfg.people * 0.85));
     const prev = n ? new Set(typesForShift(n)) : new Set();
     const isNew = typesForShift(n + 1).filter((k) => !prev.has(k));
-    this.cam.tyaw = 0; this.cam.tpitch = -0.36; this.cam.tfov = this.baseFov;
+    this.setPost(this.post, true); this.cam.tfov = this.baseFov;
     this.ui.showIntro(n + 1, cfg, isNew, () => { this.ui.hideScreen(); this.ui.countdown(() => this.beginShift()); });
   }
 
@@ -313,7 +317,7 @@ class Game {
       const dx = e.clientX - p.x, dy = e.clientY - p.y; p.x = e.clientX; p.y = e.clientY;
       if (P.size === 1) {
         if (!drag && Math.hypot(p.x - p.sx, p.y - p.sy) > 8) drag = true;
-        if (drag) { const k = 0.0032 * (this.cam.fov / 50); this.cam.tyaw = clamp(this.cam.tyaw - dx * k, -0.85, 0.85); this.cam.tpitch = clamp(this.cam.tpitch + dy * k, -0.9, -0.08); }
+        if (drag) { const k = 0.0032 * (this.cam.fov / 50); this.cam.tyaw = this._clampYaw(this.cam.tyaw - dx * k); this.cam.tpitch = clamp(this.cam.tpitch + dy * k, -1.0, 0.1); }
       } else if (P.size === 2 && pinch) {
         const [a, b] = [...P.values()]; const d = Math.hypot(a.x - b.x, a.y - b.y);
         this.cam.tfov = clamp(pinch.f * (pinch.d / d), 12, this.maxFov);
@@ -330,6 +334,7 @@ class Game {
       if (this.state === 'play' && this.sel && e.key >= '1' && e.key <= '5') this.useTool(['whistle', 'buoy', 'rescue', 'broadcast', 'medic'][+e.key - 1]);
       if (e.key === 'Escape') { if (this.sel) { this.ui.closeRadial(); this.sel = null; this.selRing.visible = false; } else if (this.state === 'play' || this.state === 'paused') this.togglePause(); }
       if (e.key === 'p' || e.key === 'P') this.togglePause();
+      if ((e.key === 'c' || e.key === 'C' || e.key === 'Tab') && (this.state === 'play' || this.state === 'title')) { e.preventDefault(); this.switchPost(); }
     });
     document.addEventListener('visibilitychange', () => { if (document.hidden && this.state === 'play') this.togglePause(true); });
   }
@@ -339,13 +344,29 @@ class Game {
     if (frac > 0) {
       const rc = new THREE.Raycaster(); rc.setFromCamera(new THREE.Vector2((px / this.W) * 2 - 1, -(py / this.H) * 2 + 1), this.camera);
       const d = rc.ray.direction;
-      c.tyaw = clamp(c.tyaw + (Math.atan2(d.x, -d.z) - c.tyaw) * frac, -0.85, 0.85);
-      c.tpitch = clamp(c.tpitch + (Math.asin(d.y) - c.tpitch) * frac, -0.9, -0.08);
+      c.tyaw = this._clampYaw(c.tyaw + (Math.atan2(d.x, -d.z) - c.tyaw) * frac);
+      c.tpitch = clamp(c.tpitch + (Math.asin(d.y) - c.tpitch) * frac, -1.0, 0.1);
     }
     c.tfov = nf;
   }
 
-  zoomBy(f) { this.zoomAt(this.W / 2, this.H / 2, f); if (f > 1 && this.cam.tfov >= this.maxFov - 1) { this.cam.tyaw *= 0.5; } }
+  zoomBy(f) { this.zoomAt(this.W / 2, this.H / 2, f); }
+
+  _clampYaw(v) { const b = this.cam.base; return clamp(v, b - 1.55, b + 1.55); }
+
+  // 안전요원 감시대 시점 (0: 왼쪽, 1: 오른쪽)
+  setPost(i, instant) {
+    const ch = this.world.chairs[i]; this.post = i;
+    this.camTarget.set(ch.x - ch.side * 0.25, ch.seatY + 0.95, ch.z);
+    const prevBase = this.cam.base;
+    this.cam.base = ch.side < 0 ? Math.PI / 2 : -Math.PI / 2;
+    this.cam.tyaw = this.cam.base + (instant ? 0 : this.cam.tyaw - prevBase) * -1;
+    this.cam.tyaw = this._clampYaw(this.cam.tyaw);
+    if (instant) { this.cam.tyaw = this.cam.base; this.cam.tpitch = -0.2; this.camBase.copy(this.camTarget); this.cam.yaw = this.cam.tyaw; this.cam.pitch = this.cam.tpitch; }
+    this.guards.forEach((g, k) => { if (g) g.hidden = k === i; });
+  }
+
+  switchPost() { this.audio.click(); this.ui.closeRadial(); this.sel = null; this.setPost(1 - this.post); }
 
   _tap(x, y) {
     if (this.state !== 'play') return;
@@ -362,7 +383,7 @@ class Game {
     this.t += dt; W.t = this.t;
     W.strength += (W.target - W.strength) * Math.min(1, dt * 0.35);
     if (this.state === 'play') this._play(dt);
-    if (this.state === 'title') { this.cam.tyaw = Math.sin(this.t * 0.07) * 0.35; this.cam.tpitch = -0.34 + Math.sin(this.t * 0.05) * 0.04; }
+    if (this.state === 'title') { this.cam.tyaw = this.cam.base + Math.sin(this.t * 0.07) * 0.7; this.cam.tpitch = -0.18 + Math.sin(this.t * 0.05) * 0.04; }
     if (!paused) {
       this.people.update(dt, this.t);
       this.fx = this.fx.filter((f) => f.update(dt) !== false);
@@ -374,6 +395,7 @@ class Game {
     const c = this.cam, k = Math.min(1, dt * 8 + (paused ? 1 : 0));
     c.yaw += (c.tyaw - c.yaw) * k; c.pitch += (c.tpitch - c.pitch) * k; c.fov += (c.tfov - c.fov) * k;
     this.camera.fov = c.fov; this.camera.updateProjectionMatrix();
+    this.camBase.lerp(this.camTarget, Math.min(1, dt * 2.5 + (paused ? 1 : 0)));
     this.camera.position.copy(this.camBase);
     if (this.shake > 0) { this.shake -= dt; const s = this.shake * 0.12; this.camera.position.x += rand(-s, s); this.camera.position.y += rand(-s, s); }
     const d = new THREE.Vector3(Math.sin(c.yaw) * Math.cos(c.pitch), Math.sin(c.pitch), -Math.cos(c.yaw) * Math.cos(c.pitch));

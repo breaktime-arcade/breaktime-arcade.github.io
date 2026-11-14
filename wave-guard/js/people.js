@@ -498,6 +498,7 @@ export class People {
     }
     const M = this.M, z = this.zero;
     for (const p of L) {
+      if (p.hidden) { this._hide(p.slot); continue; }
       p.animate(dt, t); p.place(t);
       const i = p.slot, P = p.P;
       M.head.setMatrixAt(i, P.head.matrixWorld); M.hair.setMatrixAt(i, P.hair.matrixWorld);
