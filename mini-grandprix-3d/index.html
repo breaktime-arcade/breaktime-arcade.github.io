@@ -104,6 +104,17 @@
   #results .medal { font-size: 22px; width: 40px; }
   .btn-row { display: flex; gap: 10px; justify-content: center; margin-top: 18px; flex-wrap: wrap; }
 
+  /* ---------- 대기실 ---------- */
+  #lobby { background: rgba(76, 201, 240, .22); backdrop-filter: none; }
+  .lb-track { text-align: center; font-size: 20px; color: var(--pink); min-height: 26px; }
+  #lb-list { display: grid; gap: 6px; margin-top: 10px; }
+  .lb-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 12px; font-size: 18px; background: #fff; border: 3px solid var(--ink); border-radius: 12px; }
+  .lb-row small { font-size: 13px; opacity: .6; margin-left: 4px; }
+  .lb-row.me { background: rgba(255,210,63,.55); }
+  .lb-row.empty { border-style: dashed; opacity: .6; font-size: 15px; }
+  .lb-row .st { font-size: 14px; opacity: .75; white-space: nowrap; }
+  #btn-ready:disabled { opacity: .7; }
+
   /* ---------- 튜닝 패널 ---------- */
   #tuner { position: fixed; top: 64px; right: 12px; z-index: 7; width: 250px; padding: 12px 14px; }
   #tuner h3 { margin: 0 0 8px; font-weight: normal; font-size: 18px; }
@@ -143,6 +154,7 @@
     .btn { font-size: 13px; padding: 5px 8px; }
     .panel h1 { font-size: 34px; }
     .picks.c4 { grid-template-columns: repeat(2, 1fr); }
+    .picks.c3 .pick .ds { font-size: 11px; }
     #countdown { font-size: 90px; }
   }
 </style>
@@ -218,10 +230,12 @@
     <div class="sub">아기자기한 미니카들의 신나는 레이스</div>
 
     <div class="sec-title">어떻게 달릴까요?</div>
-    <div class="picks c2" id="pick-mode"></div>
+    <div class="picks c3" id="pick-mode"></div>
 
-    <div class="sec-title">트랙</div>
-    <div class="picks c4" id="pick-track"></div>
+    <div id="track-wrap">
+      <div class="sec-title">트랙</div>
+      <div class="picks c4" id="pick-track"></div>
+    </div>
 
     <div class="sec-title">내 자동차</div>
     <div class="picks c4" id="pick-car"></div>
@@ -233,6 +247,21 @@
 
     <div class="go-row"><button class="btn start" id="btn-start">출발!</button></div>
     <div class="keys-line" id="keys-line">↑ 가속 · ↓ 브레이크 · ← → 조향 · 스페이스 드리프트 · Shift 부스터</div>
+  </div>
+</div>
+
+<!-- 같이 달리기 대기실 -->
+<div id="lobby" class="overlay" hidden>
+  <div class="panel card">
+    <h1>같이 달리기</h1>
+    <div class="sub" id="lb-title">연결하는 중…</div>
+    <div class="lb-track" id="lb-track"></div>
+    <div id="lb-list"></div>
+    <div class="keys-line" id="lb-info"></div>
+    <div class="btn-row">
+      <button class="btn start" id="btn-ready" hidden>준비 완료</button>
+      <button class="btn" id="btn-lb-cancel" style="font-size:20px">나가기</button>
+    </div>
   </div>
 </div>
 
