@@ -385,8 +385,9 @@ export class World {
   remove(b) { this.bodies = this.bodies.filter(x => x !== b); }
 
   step(dt) {
-    for (const b of this.bodies) if (b.computeForces) b.computeForces(dt);
-    for (const b of this.bodies) b.integrate(dt);
+    // remote: 다른 사람 화면에서 조종하는 차 (위치는 네트워크로 받음)
+    for (const b of this.bodies) if (b.computeForces && !b.remote) b.computeForces(dt);
+    for (const b of this.bodies) if (!b.remote) b.integrate(dt);
     // 충돌 반복 (안정성)
     for (let it = 0; it < 2; it++) {
       this.collideWalls(it === 0);
@@ -397,7 +398,7 @@ export class World {
   collideWalls(record) {
     const out = record ? this.contacts : null;
     for (const b of this.bodies) {
-      if (b.invMass === 0) continue;
+      if (b.invMass === 0 || b.remote) continue;
       const e = b.p ? b.p.restitution : this.wallRestitution;
       for (const c of b.colliders) {
         const w = b.colliderWorld(c);

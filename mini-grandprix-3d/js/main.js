@@ -10,6 +10,7 @@ import {
   SkidMarks, Particles, Sparks, makeConeMesh, makeBoulderMesh, makeSnowmanMesh, syncProp, syncBoulder,
 } from './effects.js';
 import { GameAudio } from './audio.js';
+import { NET } from './net.js';
 
 const $ = (id) => document.getElementById(id);
 const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
@@ -20,6 +21,9 @@ if (isTouch) {
 }
 
 const TOTAL_LAPS = 3;
+const isRace = () => cfg.mode !== 'practice';
+const inRace = () => phase === 'countdown' || phase === 'racing' || phase === 'done';
+let online = null;        // 같이 달리기 정보 { roster, me, startAt, sendT }
 const PLAYER_COLORS = { light: [0xffc93c, 0x2b2d42], heavy: [0x3d6bff, 0xffffff], balance: [0xff4f6d, 0xffffff], drift: [0x3ddc97, 0xffffff] };
 const AI_COLORS = [[0xb08cff, 0xffffff], [0xff8a3d, 0xffffff], [0x4cc9f0, 0xffd23f], [0x7bc95f, 0xffffff],
   [0xf2f2f2, 0xff4f6d], [0xa0714f, 0xffd23f], [0x2ec4b6, 0xffffff]];
@@ -78,7 +82,7 @@ let track = null, world = null;
 let racers = [];          // {name, body, model, ai, isPlayer, ...}
 let player = null;        // 플레이어 racer
 let props = [], bumperBodies = [];
-let phase = 'menu';       // menu | countdown | racing | done
+let phase = 'menu';       // menu | lobby | countdown | racing | done
 let raceTime = 0, countdown = 0, lastCount = 0;
 let tuning = { ...CAR_DEFAULTS };
 let resultsTimer = -1;
@@ -94,7 +98,7 @@ function disposeRace() {
 
 function carParams(type) { return { ...CAR_DEFAULTS, ...CAR_TYPES[type] }; }
 
-function buildRace() {
+function buildRace(on = null) {
   disposeRace();
   track = new Track(scene, cfg.theme);
   const th = track.theme;
@@ -119,7 +123,7 @@ function buildRace() {
   }
 
   // 출발 그리드: 2열, 플레이어는 맨 뒤
-  const count = cfg.mode === 'race' ? 5 : 1;
+  const count = cfg.mode === 'practice' ? 1 : 5;
   const slots = [];
   for (let k = 0; k < count; k++) {
     const idx = track.N - 5 - Math.floor(k / 2) * 5;
@@ -128,26 +132,29 @@ function buildRace() {
   const aiTypes = ['light', 'heavy', 'balance', 'drift'].sort(() => Math.random() - 0.5);
   const aiColors = AI_COLORS.filter(c => colorDist(c[0], PLAYER_COLORS[cfg.car][0]) > 110).sort(() => Math.random() - 0.5);
   for (let k = 0; k < count; k++) {
-    const isPlayer = k === count - 1;
+    const ro = on ? on.roster[k] : null;
+    const isPlayer = on ? k === on.me : k === count - 1;
     const s = slots[k];
     const p = track.pointAt(s.idx, s.side);
-    const type = isPlayer ? cfg.car : aiTypes[k % 4];
+    const type = ro ? ro.car : isPlayer ? cfg.car : aiTypes[k % 4];
     const params = carParams(type);
     if (isPlayer) { tuning = params; }
     const body = world.add(new CarBody({ x: p.x, z: p.z, angle: track.headingAt(s.idx), params }));
     if (isPlayer) body.p = tuning;
-    const col = isPlayer ? PLAYER_COLORS[type] : aiColors[k % aiColors.length];
+    const col = ro ? ro.col : isPlayer ? PLAYER_COLORS[type] : aiColors[k % aiColors.length];
     const model = new CarModel(scene, col[0], col[1]);
     const r = {
-      name: isPlayer ? '나' : AI_NAMES[k], type, body, model, isPlayer, color: col[0],
-      ai: isPlayer ? null : new AIDriver(body, track, cfg.diff, k + 1),
+      name: isPlayer ? '나' : ro ? ro.nm : AI_NAMES[k], type, body, model, isPlayer, color: col[0],
+      slot: k, human: ro ? !!ro.u : isPlayer, remote: false, buf: [], lastSnap: null, wasBoost: false,
+      ai: isPlayer ? null : new AIDriver(body, track, on ? 'normal' : cfg.diff, k + 1),
       idx: s.idx, crossed: false, lap: 0, nextCp: 0, lapStart: 0, lastLap: null, best: null,
       finished: false, finishTime: 0, stuckT: 0, wrongT: 0, rank: k + 1, progress: 0,
     };
     body.onBoost = () => onBoost(r);
     racers.push(r);
   }
-  player = racers[racers.length - 1];
+  player = racers.find(r => r.isPlayer);
+  if (on) for (const r of racers) if (!r.isPlayer) addTag(r);
   bestLap = store.get('best_' + cfg.theme, null);
   syncTuner();
   drawMinimapBase();
@@ -159,12 +166,14 @@ function buildRace() {
 }
 
 function startRace() {
+  if (cfg.mode === 'online') return startOnline();
+  leaveOnline();
   $('menu').hidden = true; $('results').hidden = true;
   audio.start();
   buildRace();
-  $('hud-race').classList.toggle('practice', cfg.mode !== 'race');
-  $('hud-rank').hidden = cfg.mode !== 'race';
-  if (cfg.mode === 'race') {
+  $('hud-race').classList.toggle('practice', !isRace());
+  $('hud-rank').hidden = !isRace();
+  if (isRace()) {
     phase = 'countdown'; countdown = 3.2; lastCount = 4;
     for (const r of racers) r.body.frozen = true;
   } else {
@@ -174,6 +183,9 @@ function startRace() {
 }
 
 function openMenu() {
+  const wasOnline = !!online || phase === 'lobby';
+  leaveOnline();
+  if (wasOnline) buildRace();
   phase = 'menu';
   $('results').hidden = true;
   $('menu').hidden = false;
@@ -193,7 +205,8 @@ function pick(container, items, current, onPick, render) {
 }
 function renderMenu() {
   pick('pick-mode', [
-    { key: 'race', nm: '🏁 레이스', ds: `${TOTAL_LAPS}바퀴 · 친구 4대와 순위 대결` },
+    { key: 'race', nm: '🏁 레이스', ds: `${TOTAL_LAPS}바퀴 · AI 4대와 순위 대결` },
+    { key: 'online', nm: '🌐 같이 달리기', ds: '실시간 최대 4명 · 빈자리는 AI' },
     { key: 'practice', nm: '⏱️ 연습 주행', ds: '혼자 달리며 최고 기록 도전' },
   ], cfg.mode, k => { cfg.mode = k; buildRace(); }, it => `<div class="nm">${it.nm}</div><div class="ds">${it.ds}</div>`);
   pick('pick-track', Object.entries(THEMES).map(([key, t]) => ({ key, ...t })), cfg.theme, k => { cfg.theme = k; buildRace(); }, it => {
@@ -211,11 +224,15 @@ function renderMenu() {
   pick('pick-diff', Object.entries(DIFFICULTY).map(([key, d]) => ({ key, nm: d.name, center: true })), cfg.diff, k => cfg.diff = k,
     it => `<div class="nm" style="justify-content:center">${it.nm}</div>`);
   $('diff-wrap').hidden = cfg.mode !== 'race';
+  $('track-wrap').hidden = cfg.mode === 'online';
+  $('btn-start').textContent = cfg.mode === 'online' ? '친구 찾기!' : '출발!';
   store.set('cfg', cfg);
 }
 $('btn-start').onclick = startRace;
 $('btn-again').onclick = startRace;
 $('btn-to-menu').onclick = () => { openMenu(); buildRace(); };
+$('btn-ready').onclick = (e) => { e.currentTarget.blur(); NET.ready(); };
+$('btn-lb-cancel').onclick = () => openMenu();
 $('btn-menu').onclick = (e) => { e.currentTarget.blur(); openMenu(); };
 
 // ---------- 입력 ----------
@@ -285,11 +302,11 @@ let camMode = 0, camYaw = 0, shake = 0, menuOrbit = 0;
 const camPos = new THREE.Vector3();
 function cycleCamera() {
   camMode = (camMode + 1) % CAM_MODES.length;
-  if (phase !== 'menu') flash(CAM_MODES[camMode].name + ' 시점', 700);
+  if (inRace()) flash(CAM_MODES[camMode].name + ' 시점', 700);
 }
 function updateCamera(dt, snap = false) {
   const b = player.body;
-  if (phase === 'menu') {
+  if (!inRace()) {
     // 메뉴: 출발선 주변을 천천히 돌기
     menuOrbit += dt * 0.12;
     const s = track.samples[track.N - 8];
@@ -339,6 +356,11 @@ function updateLaps(dt) {
     const b = r.body;
     const prev = r.idx;
     r.idx = track.nearestIndex(b.x, b.z, r.idx);
+    if (r.remote) {   // 다른 화면에서 계산한 바퀴 정보를 그대로 사용
+      const si = r.snapIdx != null ? r.snapIdx : r.idx;
+      r.progress = r.finished ? 1e9 - r.finishTime : r.crossed ? r.lap * N + si : si - N;
+      continue;
+    }
     let diff = r.idx - prev;
     if (diff > N / 2) diff -= N; if (diff < -N / 2) diff += N;
     if (r.nextCp < 3 && Math.abs(r.idx - cps[r.nextCp]) < 12) r.nextCp++;
@@ -352,7 +374,7 @@ function updateLaps(dt) {
         r.lap++; r.lastLap = t; r.lapStart = raceTime; r.nextCp = 0;
         if (r.best == null || t < r.best) r.best = t;
         if (r.isPlayer) onPlayerLap(t);
-        if (cfg.mode === 'race' && r.lap >= TOTAL_LAPS) {
+        if (isRace() && r.lap >= TOTAL_LAPS) {
           r.finished = true; r.finishTime = raceTime;
           if (r.isPlayer) onPlayerFinish();
         }
@@ -377,7 +399,7 @@ function updateLaps(dt) {
   // 순위
   const prevRank = player.rank;
   [...racers].sort((a, c) => c.progress - a.progress).forEach((r, i) => r.rank = i + 1);
-  if (cfg.mode === 'race' && phase === 'racing' && player.rank < prevRank && !player.finished) {
+  if (isRace() && phase === 'racing' && player.rank < prevRank && !player.finished) {
     player.body.boostGauge = Math.min(1, player.body.boostGauge + 0.12); // 추월 보너스
     flash('추월!', 600);
   }
@@ -390,10 +412,10 @@ function onPlayerLap(t) {
     msg = '최고 기록! ' + fmt(t);
     audio.jingle([[523, 0.1], [659, 0.1], [784, 0.1], [1047, 0.25]]);
   } else {
-    msg = (cfg.mode === 'race' ? `${player.lap}바퀴 · ` : '') + fmt(t);
+    msg = (isRace() ? `${player.lap}바퀴 · ` : '') + fmt(t);
     audio.jingle([[660, 0.1], [880, 0.16]]);
   }
-  if (cfg.mode === 'race' && player.lap === TOTAL_LAPS - 1) msg = '마지막 바퀴!';
+  if (isRace() && player.lap === TOTAL_LAPS - 1) msg = '마지막 바퀴!';
   flash(msg, 1500);
 }
 
@@ -409,7 +431,10 @@ function onPlayerFinish() {
 function showResults() {
   $('results').hidden = false;
   $('res-title').textContent = player.rank === 1 ? '우승! 🏆' : `${player.rank}등으로 완주!`;
-  $('res-sub').textContent = `${track.theme.name} · ${TOTAL_LAPS}바퀴 · 상대 ${DIFFICULTY[cfg.diff].name}`;
+  $('res-sub').textContent = online ? `같이 달리기 · ${track.theme.name} · ${TOTAL_LAPS}바퀴`
+    : `${track.theme.name} · ${TOTAL_LAPS}바퀴 · 상대 ${DIFFICULTY[cfg.diff].name}`;
+  $('btn-again').textContent = online ? '다시 같이 달리기' : '다시 달리기';
+  if (online) NET.endRoom();
   renderResults();
 }
 function renderResults() {
@@ -417,7 +442,7 @@ function renderResults() {
   const rows = [...racers].sort((a, c) => a.rank - c.rank).map((r, i) => `
     <tr class="${r.isPlayer ? 'me' : ''}">
       <td class="medal">${medals[i]}</td>
-      <td><span class="swatch" style="display:inline-block;vertical-align:-2px;margin-right:6px;background:#${r.color.toString(16).padStart(6, '0')}"></span>${r.name} <small style="opacity:.6">${CAR_TYPES[r.type].name}</small></td>
+      <td><span class="swatch" style="display:inline-block;vertical-align:-2px;margin-right:6px;background:#${r.color.toString(16).padStart(6, '0')}"></span>${online && r.human && !r.isPlayer ? '👤 ' : ''}${r.name} <small style="opacity:.6">${online && !r.human ? 'AI · ' : ''}${CAR_TYPES[r.type].name}</small></td>
       <td>${r.finished ? fmt(r.finishTime) : '달리는 중…'}</td>
       <td>${r.best != null ? '최고 ' + fmt(r.best) : ''}</td>
     </tr>`).join('');
@@ -426,6 +451,7 @@ function renderResults() {
 
 // ---------- 부스터 ----------
 function onBoost(r) {
+  if (!player) return;
   const d = Math.hypot(r.body.x - player.body.x, r.body.z - player.body.z);
   audio.boost(r.isPlayer ? 1 : Math.max(0, 0.5 - d / 80));
   if (r.isPlayer) { flash('부스터!', 700); shake = 0.4; }
@@ -449,7 +475,7 @@ function updateHud(dt) {
   el.speedNum.textContent = kmh;
   el.speedArc.setAttribute('stroke-dasharray', `${Math.min(1, kmh / 145) * 207} 300`);
   el.speedArc.setAttribute('stroke', b.boosting ? '#4cc9f0' : '#ff4f6d');
-  if (cfg.mode === 'race') {
+  if (isRace()) {
     el.rank.innerHTML = `${player.rank}<small>/${racers.length}등</small>`;
     el.lap.textContent = `${Math.min(player.lap + (player.crossed ? 1 : 0), TOTAL_LAPS) || 1}/${TOTAL_LAPS}`;
     el.time.textContent = fmt(player.finished ? player.finishTime : raceTime);
@@ -607,6 +633,193 @@ function carEffects(r, dt) {
   return sliding ? Math.min(1, Math.abs(car.slipRear) * 1.6 + (hardBrake ? 0.5 : 0)) : 0;
 }
 
+
+// ---------- 같이 달리기 (실시간) ----------
+const SEND_HZ = 12, INTERP_MS = 140, EXTRAP_MAX = 0.25;
+const r2 = (v) => Math.round(v * 100) / 100;
+
+function leaveOnline() {
+  if (online || phase === 'lobby') NET.leave();
+  online = null;
+  $('btn-tune').hidden = false;
+}
+
+function startOnline() {
+  leaveOnline();
+  $('menu').hidden = true; $('results').hidden = true;
+  $('tuner').hidden = true; $('btn-tune').classList.remove('on'); $('btn-tune').hidden = true;
+  audio.start();
+  phase = 'lobby';
+  NET.start({
+    car: cfg.car,
+    carName: (k) => (CAR_TYPES[k] ? CAR_TYPES[k].name : ''),
+    themeName: (k) => (THEMES[k] ? THEMES[k].name : ''),
+    themes: Object.keys(THEMES),
+  }, netHandlers);
+}
+
+const netHandlers = {
+  onPreview(theme) {
+    if (phase !== 'lobby' || !THEMES[theme]) return;
+    cfg.theme = theme; buildRace();
+  },
+  // 방장: 출발 그리드 배정 (사람은 뒤쪽 자리부터, 빈자리는 AI)
+  buildRoster(people) {
+    const roster = new Array(5).fill(null);
+    const used = [];
+    const free = (c) => used.every(u => colorDist(u, c[0]) > 110);
+    const humanSlots = [4, 3, 2, 1];
+    people.forEach((p, i) => {
+      const car = CAR_TYPES[p.car] ? p.car : 'balance';
+      let col = PLAYER_COLORS[car];
+      if (!free(col)) col = AI_COLORS.find(free) || col;
+      used.push(col[0]);
+      roster[humanSlots[i]] = { u: p.u, nm: p.nm, car, col };
+    });
+    const types = ['light', 'heavy', 'balance', 'drift'].sort(() => Math.random() - 0.5);
+    const cols = AI_COLORS.slice().sort(() => Math.random() - 0.5);
+    let n = 0;
+    for (let k = 0; k < 5; k++) if (!roster[k]) {
+      const col = cols.find(free) || cols[k];
+      used.push(col[0]);
+      roster[k] = { nm: AI_NAMES[k], car: types[n++ % 4], col };
+    }
+    return roster;
+  },
+  onStart({ roster, me, startAt, theme }) {
+    if (phase !== 'lobby') return;
+    cfg.theme = THEMES[theme] ? theme : 'park';
+    online = { roster, me, startAt, sendT: 0 };
+    $('results').hidden = true;
+    buildRace(online);
+    $('hud-race').classList.remove('practice');
+    $('hud-rank').hidden = false;
+    phase = 'countdown'; countdown = (startAt - NET.now()) / 1000; lastCount = 4;
+    for (const r of racers) r.body.frozen = true;
+    applyControl();
+    flash('같이 달리기!', 1500);
+  },
+  onCar(slot, arr) {
+    if (!online || slot === online.me || !Array.isArray(arr)) return;
+    const r = racers[slot]; if (!r) return;
+    r.lastSnap = arr;
+    if (!r.remote) return;
+    const t = arr[13];
+    if (r.buf.length && t <= r.buf[r.buf.length - 1][13]) return;
+    r.buf.push(arr);
+    if (r.buf.length > 20) r.buf.shift();
+    readFlags(r, arr);
+  },
+  onControl() { if (online) applyControl(); },
+};
+
+// 자리마다 내 화면이 조종할지(로컬) 받아서 그릴지(원격) 정하기
+function applyControl() {
+  for (const r of racers) {
+    if (r.isPlayer) continue;
+    const local = NET.controls(r.slot);
+    if (local && r.remote) {
+      // 원격 → 로컬 (나간 사람·AI 자리를 방장이 이어받기)
+      r.remote = false; r.body.remote = false;
+      if (r.lastSnap) {
+        const a = r.lastSnap;
+        Object.assign(r.body, { x: a[0], z: a[1], angle: a[2], vx: a[3], vz: a[4], av: a[5], steer: a[6], boostLeft: 0 });
+        readFlags(r, a);
+      }
+      r.body.frozen = phase === 'countdown';
+      r.ai.idx = track.nearestIndex(r.body.x, r.body.z);
+      r.stuckT = 0; r.wrongT = 0;
+    } else if (!local && !r.remote) {
+      r.remote = true; r.body.remote = true; r.buf = [];
+      r.body.frozen = false;
+    }
+    if (r.tag) r.tag.material.opacity = r.human && !NET.isOnline(r.slot) ? 0.45 : 1;
+  }
+}
+
+function readFlags(r, a) {
+  const f = a[7];
+  r.crossed = !!(f & 8);
+  r.lap = a[8]; r.nextCp = a[9];
+  r.lapStart = a[10];
+  r.finished = !!(f & 16); r.finishTime = a[11];
+  r.best = a[12] < 0 ? null : a[12];
+  if (a[14] != null) r.snapIdx = a[14];
+}
+
+function encode(r) {
+  const b = r.body;
+  const f = (b.boosting ? 1 : 0) | (b.drifting ? 2 : 0) | (b.input.brake > 0 ? 4 : 0) | (r.crossed ? 8 : 0) | (r.finished ? 16 : 0) | (b.input.throttle > 0 ? 32 : 0);
+  return [r2(b.x), r2(b.z), r2(b.angle), r2(b.vx), r2(b.vz), r2(b.av), r2(b.steer), f,
+    r.lap, r.nextCp, r2(r.lapStart), r2(r.finishTime), r.best == null ? -1 : r2(r.best), Math.round(NET.now()), r.idx];
+}
+
+// 원격 차: 140ms 전 시점을 보간, 끊기면 잠깐 예측
+function netBeforeStep(dt) {
+  const tR = NET.now() - INTERP_MS;
+  for (const r of racers) {
+    if (!r.remote) continue;
+    const buf = r.buf, b = r.body;
+    if (!buf.length) { r.pose = null; continue; }
+    while (buf.length > 2 && buf[1][13] <= tR) buf.shift();
+    const A = buf[0], B = buf[1];
+    let x, z, ang, vx, vz;
+    if (B && tR >= A[13]) {
+      const k = Math.min(1, (tR - A[13]) / Math.max(1, B[13] - A[13]));
+      let da = B[2] - A[2]; da = Math.atan2(Math.sin(da), Math.cos(da));
+      x = A[0] + (B[0] - A[0]) * k; z = A[1] + (B[1] - A[1]) * k; ang = A[2] + da * k;
+      vx = A[3] + (B[3] - A[3]) * k; vz = A[4] + (B[4] - A[4]) * k;
+      if (k >= 1) { // B 이후는 속도로 살짝 예측
+        const e = Math.min(EXTRAP_MAX, (tR - B[13]) / 1000);
+        x = B[0] + B[3] * e; z = B[1] + B[4] * e; ang = B[2] + B[5] * e; vx = B[3]; vz = B[4];
+      }
+    } else {
+      const L = buf[buf.length - 1];
+      const e = Math.max(0, Math.min(EXTRAP_MAX, (tR - L[13]) / 1000));
+      x = L[0] + L[3] * e; z = L[1] + L[4] * e; ang = L[2] + L[5] * e; vx = L[3]; vz = L[4];
+    }
+    const L = buf[buf.length - 1];
+    const vLong0 = vx * Math.sin(ang) + vz * Math.cos(ang);
+    Object.assign(b, { x, z, angle: ang, vx, vz, av: L[5], steer: L[6] });
+    b.boostLeft = L[7] & 1 ? 1 : 0;
+    b.drifting = !!(L[7] & 2);
+    b.input.brake = L[7] & 4 ? 1 : 0;
+    b.input.throttle = L[7] & 32 ? 1 : 0;
+    b.wheelSpin += vLong0 * dt * 2.6;
+    b.accLong = 0; b.accLat = 0; b.slipRear = b.drifting ? 0.4 : 0; b.slipFront = 0;
+    if (b.boosting && !r.wasBoost) onBoost(r);
+    r.wasBoost = b.boosting;
+    r.pose = { x, z };
+  }
+}
+
+function netAfterStep(dt) {
+  // 충돌로 밀린 원격 차는 받은 위치로 되돌림 (내 차만 살짝 밀려남)
+  for (const r of racers) if (r.remote && r.pose) { r.body.x = r.pose.x; r.body.z = r.pose.z; }
+  online.sendT -= dt;
+  if (online.sendT > 0) return;
+  online.sendT = 1 / SEND_HZ;
+  const map = {};
+  for (const r of racers) if (!r.remote) map[r.slot] = encode(r);
+  NET.sendCars(map);
+}
+
+// 다른 차 머리 위 이름표
+function addTag(r) {
+  const c = document.createElement('canvas'); c.width = 256; c.height = 64;
+  const g = c.getContext('2d');
+  const text = (r.human ? '' : 'AI ') + r.name;
+  g.font = '34px Jua, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  const w = Math.min(248, g.measureText(text).width + 30);
+  g.fillStyle = 'rgba(255,253,246,.92)'; g.strokeStyle = '#2b2d42'; g.lineWidth = 5;
+  g.beginPath(); if (g.roundRect) g.roundRect((256 - w) / 2, 6, w, 52, 18); else g.rect((256 - w) / 2, 6, w, 52); g.fill(); g.stroke();
+  g.fillStyle = r.human ? '#ff4f6d' : '#2b2d42'; g.fillText(text, 128, 34);
+  const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
+  sp.scale.set(4.4, 1.1, 1); sp.position.set(0, 3.2, 0);
+  r.model.root.add(sp); r.tag = sp;
+}
+
 // ---------- 메인 루프 ----------
 const FIXED = 1 / 120;
 let acc = 0, last = performance.now();
@@ -618,9 +831,9 @@ function frame(now) {
   if (dt > 0.1) dt = 0.1;
 
   if (phase === 'countdown') {
-    countdown -= dt;
-    const n = Math.ceil(countdown);
-    if (n !== lastCount && n >= 0) {
+    countdown = online ? (online.startAt - NET.now()) / 1000 : countdown - dt;
+    const n = Math.max(0, Math.ceil(countdown));
+    if (n !== lastCount && n <= 3) {
       lastCount = n;
       el.count.hidden = false;
       el.count.textContent = n > 0 ? n : '출발!';
@@ -636,13 +849,14 @@ function frame(now) {
   if (el.count.hidden === false && phase !== 'countdown' && countdown < -0.8) el.count.hidden = true;
   if (phase !== 'countdown') countdown -= dt;
 
-  const running = phase === 'racing' || phase === 'done' || phase === 'countdown';
+  const running = inRace();
   if (running) {
     readInput(dt);
     // AI (뒤처진 정도에 따라 살짝 보정: 쉬움/보통만)
     const bodies = racers.map(r => r.body);
     for (const r of racers) if (r.ai) {
-      if (!r.isPlayer && cfg.diff !== 'hard' && phase === 'racing') {
+      if (r.remote) continue;
+      if (!r.isPlayer && cfg.mode === 'race' && cfg.diff !== 'hard' && phase === 'racing') {
         const gap = (r.progress - player.progress) / track.N;
         r.ai.rubber = gap > 0.2 ? 0.95 : gap < -0.2 ? 1.05 : 1;
       }
@@ -654,6 +868,7 @@ function frame(now) {
       r.body.surfaceGrip = zn ? zn.grip : 1;
       r.body.surfaceDrag = zn ? zn.drag : 0;
     }
+    if (online) netBeforeStep(dt);
     acc += dt;
     let steps = 0;
     while (acc >= FIXED && steps < 8) {
@@ -662,6 +877,10 @@ function frame(now) {
       acc -= FIXED; steps++;
     }
     if (steps === 8) acc = 0;
+    if (online) {
+      if (phase !== 'countdown') raceTime = Math.max(0, (NET.now() - online.startAt) / 1000);
+      netAfterStep(dt);
+    }
     handleContacts();
     bumpCooldown -= dt;
     updateLaps(dt);
@@ -678,7 +897,7 @@ function frame(now) {
   if (!$('results').hidden && Math.floor(now / 500) !== Math.floor((now - dt * 1000) / 500)) renderResults();
 
   updateCamera(dt);
-  if (phase !== 'menu') { updateHud(dt); drawMinimap(); }
+  if (inRace()) { updateHud(dt); drawMinimap(); }
   renderer.render(scene, camera);
 }
 
