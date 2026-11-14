@@ -45,6 +45,11 @@ button{font-family:inherit}
 .stars i{color:rgba(255,255,255,.25);font-style:normal}
 .alive{margin-left:auto;font-weight:700;font-size:14px;background:rgba(0,0,0,.35);padding:3px 11px;border-radius:999px;white-space:nowrap}
 .alive b{color:#7cff9b;font-size:16px}
+.blogbar{display:none;position:relative;z-index:3;margin:8px 12px 0;padding:8px 12px;border-radius:10px;background:rgba(255,210,63,.12);border:1px solid #ffd23f;color:#fff;text-decoration:none;font-size:14px;text-align:center}
+.blogbar b{color:#ffd23f}
+.blogbar.show{display:block}
+.morelink{display:block;margin-top:12px;font-size:14px;font-weight:700;color:#ff9ad5;text-decoration:none}
+#app:fullscreen{max-width:none;overflow:auto}
 .icon-btn{border:0;background:rgba(0,0,0,.35);color:#fff;width:30px;height:30px;border-radius:50%;cursor:pointer;font-size:15px;flex:none}
 .scr-body{display:flex;flex:1;gap:10px;padding:0 12px;position:relative;z-index:1;min-height:0}
 .host-box{width:150px;flex:none;display:flex;align-items:flex-end;justify-content:center}
@@ -97,10 +102,10 @@ button{font-family:inherit}
 .caption::before{content:'사회자';display:inline-block;font-size:11px;background:var(--gold);color:#1a1440;border-radius:3px;padding:0 5px;margin-right:7px;vertical-align:2px}
 .splash{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:5;text-align:center;
   font-family:'Noto Sans KR',sans-serif;font-weight:900;font-size:50px;line-height:1.2;letter-spacing:2px;color:#ffe14d;
-  -webkit-text-stroke:1px rgba(120,30,10,.6);text-shadow:0 3px 0 #b3361f,0 0 18px rgba(255,200,0,.55);opacity:0}
+  text-shadow:1px 1px 0 #8a2a12,-1px 1px 0 #8a2a12,1px -1px 0 #8a2a12,-1px -1px 0 #8a2a12,0 4px 0 #b3361f,0 0 18px rgba(255,200,0,.55);opacity:0}
 .splash.show{animation:splash 1.25s ease forwards}
-.splash.bad{color:#ff8a8a;-webkit-text-stroke:1px rgba(90,13,13,.6);text-shadow:0 3px 0 #5a0d0d,0 0 18px rgba(255,60,60,.6)}
-.splash.good{color:#8dffb4;-webkit-text-stroke:1px rgba(10,90,42,.6);text-shadow:0 3px 0 #0a5a2a,0 0 18px rgba(60,255,140,.6)}
+.splash.bad{color:#ff8a8a;text-shadow:1px 1px 0 #5a0d0d,-1px 1px 0 #5a0d0d,1px -1px 0 #5a0d0d,-1px -1px 0 #5a0d0d,0 4px 0 #5a0d0d,0 0 18px rgba(255,60,60,.6)}
+.splash.good{color:#8dffb4;text-shadow:1px 1px 0 #0a5a2a,-1px 1px 0 #0a5a2a,1px -1px 0 #0a5a2a,-1px -1px 0 #0a5a2a,0 4px 0 #0a5a2a,0 0 18px rgba(60,255,140,.6)}
 @keyframes splash{0%{opacity:0;transform:scale(.5)}18%{opacity:1;transform:scale(1.12)}30%{transform:scale(1)}78%{opacity:1}100%{opacity:0;transform:scale(1.05)}}
 
 /* 전구 줄 */
@@ -222,6 +227,7 @@ button{font-family:inherit}
 </head>
 <body>
 <div id="app">
+  <a class="blogbar" id="blogBar" href="https://smile-willow.tistory.com/" target="_top">🕹 <b>쉬는시간 오락실</b>에서 더 많은 무료 게임 하기 →</a>
   <div class="beam b1"></div><div class="beam b2"></div><div class="beam b3"></div>
 
   <div class="studio">
@@ -233,6 +239,7 @@ button{font-family:inherit}
           <span class="qno" id="qno">대기 중</span>
           <span class="stars" id="stars"></span>
           <span class="alive">생존 <b id="aliveN">20</b>명</span>
+          <button class="icon-btn" id="fsBtn" title="전체화면">⛶</button>
           <button class="icon-btn" id="muteBtn" title="소리 켜기/끄기">🔊</button>
         </div>
         <div class="scr-body">
@@ -324,6 +331,7 @@ button{font-family:inherit}
       </div>
       <div class="hint" id="finNext">잠시 후 대기실로 돌아갑니다…</div>
       <button class="btn sm" id="finLeave">나가기</button>
+      <a class="morelink" href="https://smile-willow.tistory.com/" target="_top">🕹 쉬는시간 오락실에서 다른 게임 하러 가기 →</a>
     </div>
   </div>
 
@@ -342,6 +350,7 @@ button{font-family:inherit}
       <div class="best" id="resBest"></div>
       <button class="btn" id="againBtn">다시 도전</button>
       <button class="btn sub" id="homeBtn">처음으로</button>
+      <a class="morelink" href="https://smile-willow.tistory.com/" target="_top">🕹 쉬는시간 오락실에서 다른 게임 하러 가기 →</a>
     </div>
   </div>
 </div>
