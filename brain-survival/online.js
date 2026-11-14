@@ -16,7 +16,16 @@ const SDK = 'https://www.gstatic.com/firebasejs/10.12.2/';
 const TOTAL = BS.TOTAL, MAXQ = BS.MAXQ;
 const WAIT_MS = window.BS_WAIT_MS || 10000;      // 2명 이상 모이면 시작까지 대기
 const HB_STALE = 7000;      // 호스트 응답이 이 시간 넘게 없으면 교체
-const BAN = ['씨발','시발','ㅅㅂ','병신','ㅂㅅ','개새','좆','존나','미친','fuck','shit','sex','섹스','운영자','관리자','admin'];
+/* 닉네임은 직접 입력받지 않고 무작위로 지어 줍니다 (욕설·음란 닉네임 방지) */
+const ADJ = ['용감한','졸린','배고픈','똑똑한','수줍은','신나는','엉뚱한','느긋한','반짝이는','씩씩한','행복한','날쌘','귀여운',
+  '꼼꼼한','명랑한','다정한','재빠른','웃는','춤추는','노래하는','깜찍한','든든한','상냥한','멋진','호기심','당당한','조용한','힘센'];
+const NOUN = ['호랑이','판다','다람쥐','고양이','강아지','펭귄','수달','부엉이','토끼','코알라','햄스터','거북이','오리','여우',
+  '고래','너구리','기린','사자','알파카','돌고래','병아리','참새','해달','미어캣','물개','곰돌이','치타','두더지'];
+function randomNick() {
+  let n;
+  do { n = BS.pick(ADJ) + BS.pick(NOUN); } while (n.length > 8);
+  return n;
+}
 
 let db = null, uid = null, nick = '', offset = 0, connected = false;
 let show = null, presence = {}, answers = {}, answersKey = null, answersRef = null;
@@ -39,26 +48,16 @@ function cfgOk() { const c = window.FIREBASE_CONFIG; return c && c.apiKey && !/^
 
 BS.onlineStart = () => {
   $('ovTitle').classList.remove('show');
-  $('nickInput').value = BS.store.get('nick', '');
+  nick = randomNick();
+  $('nickShow').textContent = nick;
   $('nickErr').textContent = cfgOk() ? '' : '⚠ 아직 실시간 서버 설정이 끝나지 않았어요. (firebase-config.js)';
   $('ovNick').classList.add('show');
-  setTimeout(() => $('nickInput').focus(), 50);
 };
-function checkNick(n) {
-  if (n.length < 2 || n.length > 8) return '닉네임은 2~8글자로 정해 주세요.';
-  if (!/^[가-힣a-zA-Z0-9_]+$/.test(n)) return '한글·영문·숫자만 쓸 수 있어요. (띄어쓰기·특수문자 안 됨)';
-  const low = n.toLowerCase();
-  if (BAN.some(w => low.includes(w))) return '사용할 수 없는 단어가 들어 있어요.';
-  return '';
-}
+$('nickRoll').onclick = () => { nick = randomNick(); $('nickShow').textContent = nick; BS.SFX.flip(); };
 $('nickCancel').onclick = () => { $('ovNick').classList.remove('show'); $('ovTitle').classList.add('show'); };
-$('nickInput').addEventListener('keydown', e => { if (e.key === 'Enter') $('nickOk').click(); });
 $('nickOk').onclick = async () => {
-  const n = $('nickInput').value.trim();
-  const err = checkNick(n);
-  if (err) { $('nickErr').textContent = err; return; }
+  if (!nick) nick = randomNick();
   if (!cfgOk()) { $('nickErr').textContent = '⚠ 실시간 서버 설정(firebase-config.js)이 필요해요.'; return; }
-  nick = n; BS.store.set('nick', n);
   $('nickErr').textContent = '연결 중…'; $('nickOk').disabled = true;
   try {
     await connect();
