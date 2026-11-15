@@ -142,12 +142,17 @@ aside h3{font-family:var(--title);font-weight:400;font-size:1.1rem;margin-bottom
 </main>
 <script>
   window.addEventListener('load', function () {
-    if (window.__ddaengReady) return;
-    var card = document.querySelector('.soon');
-    var btn = document.getElementById('practice');
-    btn.disabled = true;
-    card.textContent = '게임 파일(ddaeng.js)을 불러오지 못했어요. index.html과 같은 폴더에 ddaeng.js가 있는지 확인해 주세요.';
-    card.style.color = '#e8503a';
+    if (window.__ddaengReady === 3) return;
+    var msg = document.getElementById('net-msg');
+    {
+      if (window.__ddaengMissing) {
+        document.getElementById('practice').disabled = true;
+        msg.textContent = '게임 파일(ddaeng.js)을 찾지 못했어요. index.html과 같은 폴더에 ddaeng.js가 있는지 확인해 주세요.';
+      } else {
+        msg.textContent = '게임 파일(ddaeng.js)이 예전 버전이에요. 새 ddaeng.js로 바꿔 올린 뒤 1~2분 기다렸다가 새로고침해 주세요.';
+      }
+      msg.style.color = '#e8503a';
+    }
   });
 </script>
 <noscript>게임을 하려면 JavaScript를 켜 주세요.</noscript>
