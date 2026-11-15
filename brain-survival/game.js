@@ -19,7 +19,7 @@ const CATS = {
 };
 const NAMES = ['번개머리','퀴즈요정','만물박사','동네천재','척척석사','꼼꼼이','느긋한곰','벼락치기','책벌레','호기심왕',
   '똑순이','엉뚱이','잔머리왕','찍기달인','모범생','깡다구','반짝이','수다쟁이','멍때리기','시골영재','골목대장','왕눈이'];
-const TOTAL = 20, ME = 14, MAXQ = 40;
+const TOTAL = 8, ME = 3, MAXQ = 40;
 const BASE = { 1: .86, 2: .68, 3: .5 };
 const SKIN = ['#ffdbb5','#f7c99b','#eeb78a','#e0a878','#ffe3c8','#f3c2a0'];
 const HAIRC = ['#1d1a24','#2b2230','#3b2a20','#5a3a22','#7a4a26','#1f2438','#8a5a2b','#4a2a3a'];
@@ -190,7 +190,7 @@ function takeFrom(filters) { const r = takeFromSet(G.used, G.lastCats, filters);
 /* 문제 고르기 (혼자/함께 공용): used·lastCats는 호출 쪽에서 관리 */
 function chooseQuestion(used, lastCats, qn, aliveN) {
   let pool;
-  if (aliveN <= 3) pool = [3, 3, 2];
+  if (aliveN <= 2) pool = [3, 3, 2];
   else if (qn <= 3) pool = [1];
   else if (qn <= 6) pool = [1, 2, 2];
   else if (qn <= 10) pool = [2, 2, 3];
@@ -212,13 +212,15 @@ function pickRevival() {
 function buildStage(cs) {
   cs = cs || G.cs;
   el.rowBack.innerHTML = ''; el.rowFront.innerHTML = '';
+  el.rowBack.style.display = cs.length > 10 ? '' : 'none';
+  el.rowFront.classList.toggle('solo', cs.length <= 10);
   cs.forEach(c => {
     const d = document.createElement('div');
     d.className = 'ct' + (c.me ? ' me' : '') + (c.human && !c.me ? ' human' : '');
     d.innerHTML = (c.me ? '<span class="tag">나</span>' : '') +
       `<div class="ava">${avatarSVG(c.look)}</div><div class="board"><span>?</span></div><div class="plate">${esc(c.name)}</div>`;
     c.el = d; c.bd = d.querySelector('.board');
-    (c.i < 10 ? el.rowBack : el.rowFront).appendChild(d);
+    (cs.length > 10 && c.i < 10 ? el.rowBack : el.rowFront).appendChild(d);
   });
 }
 function setBoard(c, txt, cls, anim) {
@@ -432,7 +434,7 @@ async function revival(id) {
 /* ───────── 탈락 후 선택 ───────── */
 function outPrompt(left) {
   return new Promise(res => {
-    const canRev = !G.revUsed && left >= 4;
+    const canRev = !G.revUsed && left >= 3;
     $('outDesc').innerHTML = `<b style="color:#ffd23f">${TOTAL}명 중 ${G.rank}위</b>로 탈락했어요.<br>남은 참가자는 ${left}명입니다.` +
       (canRev ? '<br><br>🔁 <b>패자부활 찬스</b>가 남아 있어요!<br>한 문제를 맞히면 다시 무대로 돌아옵니다.' : '');
     const box = $('outBtns'); box.innerHTML = '';
@@ -450,7 +452,7 @@ async function loop(id) {
   const ok = () => GID === id;
   updateAlive();
   splash('두뇌<br>서바이벌'); SFX.intro();
-  say('두뇌 서바이벌에 오신 것을 환영합니다! 20명 중 최후의 1인은 누구일까요?', 'happy');
+  say(`두뇌 서바이벌에 오신 것을 환영합니다! ${TOTAL}명 중 최후의 1인은 누구일까요?`, 'happy');
   await wait(2800); if (!ok()) return;
 
   while (true) {
@@ -507,7 +509,7 @@ async function finish(alive, id) {
 
   $('resTitle').textContent = win ? (alive.length === 1 ? '🏆 최후의 1인!' : '🏆 공동 우승!') : `${rank}위`;
   $('resTitle').className = 'big' + (win ? '' : ' bad');
-  $('resDesc').innerHTML = win ? '20명과의 두뇌 대결에서 끝까지 살아남았어요!'
+  $('resDesc').innerHTML = win ? `${TOTAL}명과의 두뇌 대결에서 끝까지 살아남았어요!`
     : rank <= 3 ? '아깝다! 우승이 코앞이었어요.' : rank <= 10 ? '잘 버텼어요! 다음엔 더 높이 가 봐요.' : '아쉽네요! 다시 도전해 볼까요?';
   $('stRank').textContent = `${rank}위`;
   $('stSurv').textContent = `${G.survived}문제`;
@@ -548,7 +550,7 @@ function idleStage() {
 /* ───────── 버튼 ───────── */
 function refreshBest() {
   const best = store.get('best', null), wins = store.get('wins', 0), plays = store.get('plays', 0);
-  $('bestTxt').textContent = plays ? `내 기록: 최고 ${best}위 · 우승 ${wins}회 · ${plays}판 도전` : '처음 오셨군요! 20명과 실력을 겨뤄 보세요.';
+  $('bestTxt').textContent = plays ? `내 기록: 최고 ${best}위 · 우승 ${wins}회 · ${plays}판 도전` : `처음 오셨군요! ${TOTAL}명과 실력을 겨뤄 보세요.`;
 }
 function setMute(m) { muted = m; store.set('mute', m); $('muteBtn').textContent = m ? '🔇' : '🔊'; }
 $('muteBtn').onclick = () => { setMute(!muted); if (!muted) { ac(); SFX.click(); } };
