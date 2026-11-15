@@ -83,6 +83,41 @@ html,body{width:100%;height:100%;background:#0b0918;overflow:hidden;font-family:
 .topt b{color:#fff}.topt span{opacity:.8}
 .topt.sel{border-color:#ffd45c;background:#3a2f7a;box-shadow:0 0 10px rgba(255,212,92,.35)}
 .thint{font-size:clamp(9px,2vh,12px);opacity:.7}
+
+/* 협동 레이드 */
+#coop{background:rgba(8,6,20,.82);backdrop-filter:blur(3px);z-index:15}
+.res.cp{width:min(94vw,820px)}
+.cp-head{width:100%;display:flex;justify-content:space-between;align-items:center}
+.cp-head h1{font-size:clamp(18px,4.6vh,30px);color:#ffd45c}
+.xbtn{background:#3a3470;color:#fff;border:none;border-radius:10px;width:36px;height:36px;font-size:18px;cursor:pointer}
+.cp-entry{width:100%;display:flex;flex-direction:column;gap:1.4vh;align-items:stretch}
+.cp-nick{font-size:clamp(11px,2.6vh,15px);text-align:center}
+.cp-nick b{color:#ffd45c}
+.mini{font-family:inherit;border:none;border-radius:8px;background:#4a3f94;color:#fff;padding:.5vh 10px;font-size:clamp(10px,2.2vh,13px);cursor:pointer}
+.cp-row{display:flex;gap:1vw}
+.cp-row input{flex:1;font-family:inherit;font-size:clamp(14px,3.2vh,20px);text-align:center;letter-spacing:6px;border-radius:12px;border:2px solid #4a3f94;background:#15112e;color:#fff;padding:1vh;user-select:text;-webkit-user-select:text}
+.btn.sub2{background:linear-gradient(#7a6ad8,#4f43a6);color:#fff;box-shadow:0 4px 0 #2a2366}
+.cp-tip{font-size:clamp(9px,2vh,12px);opacity:.7;text-align:center}
+.cp-msg{min-height:1.2em;font-size:clamp(10px,2.2vh,13px);text-align:center}
+.cp-room{width:100%;display:flex;flex-direction:column;gap:1vh}
+.cp-top{display:flex;justify-content:space-between;align-items:center;gap:1vw;flex-wrap:wrap}
+.cp-code{font-size:clamp(12px,2.8vh,16px)}
+.cp-code b{font-size:clamp(20px,5vh,32px);color:#ffd45c;letter-spacing:4px;margin-left:6px}
+.cp-syn{display:flex;gap:6px;align-items:center;font-size:clamp(9px,2vh,12px)}
+.cp-syn span{padding:2px 8px;border-radius:9px;background:#2a2458;opacity:.45}
+.cp-syn span.on{opacity:1;background:#5a4ab0}
+.cp-syn b{color:#ffe68a}.cp-syn small{opacity:.6}
+.slots{display:grid;grid-template-columns:repeat(4,1fr);gap:.8vw}
+.slot{background:#221d4a;border:2px solid #3a3470;border-radius:12px;padding:.8vh .4vw;display:flex;flex-direction:column;align-items:center;gap:.3vh;font-size:clamp(9px,2vh,12px);text-align:center;min-height:clamp(90px,24vh,150px);justify-content:center}
+.slot.me{background:#2e2768}
+.slot.empty{opacity:.45;border-style:dashed}
+.slot canvas{width:clamp(36px,10vh,64px);height:clamp(36px,10vh,64px)}
+.slot b{font-size:clamp(10px,2.3vh,14px)}
+.slot .rl{font-style:normal;color:#c9bfff}
+.slot em{font-style:normal;font-weight:800;color:#9a92c8}
+.slot em.rd{color:#7dff9a}.slot em.host{color:#ffd45c}
+.cp-stage{display:flex;align-items:center;gap:8px;font-size:clamp(10px,2.3vh,14px);flex-wrap:wrap}
+.cp-stage span{opacity:.75}
 </style>
 </head>
 <body>
@@ -105,10 +140,30 @@ html,body{width:100%;height:100%;background:#0b0918;overflow:hidden;font-family:
       <div class="deck" id="deck"></div>
     </div>
     <div class="btns">
-      <button class="btn sub" disabled>협동 레이드 (2~4인)<em>준비 중</em></button>
+      <button class="btn sub" id="coopBtn">🤝 협동 레이드 (2~4인)</button>
       <button class="btn sub" disabled>대결 (1:1 · 2:2)<em>준비 중</em></button>
       <button class="btn" id="startBtn">출전!</button>
     </div>
+  </div>
+</div>
+
+
+<div id="coop" class="ov">
+  <div class="res cp">
+    <div class="cp-head"><h1>🤝 협동 레이드</h1><button id="cpBack" class="xbtn">✕</button></div>
+    <div id="cpEntry" class="cp-entry">
+      <div class="cp-nick">내 이름 <b id="cpNick">…</b> <button class="mini" id="cpReroll">다시 뽑기</button></div>
+      <div class="cp-row"><button class="btn" id="cpCreate">방 만들기</button><button class="btn sub2" id="cpQuick">빠른 참가</button></div>
+      <div class="cp-row"><input id="cpCode" inputmode="numeric" maxlength="4" placeholder="방 번호 4자리" autocomplete="off"><button class="btn sub2" id="cpJoin">번호로 참가</button></div>
+      <div class="cp-tip">최대 4명이 한 전장에서 함께 싸워요. 인원이 많을수록 적도 강해져요.</div>
+    </div>
+    <div id="cpRoom" class="cp-room" style="display:none">
+      <div class="cp-top"><div class="cp-code">방 번호 <b id="cpRoomCode"></b></div><div id="cpSyn" class="cp-syn"></div></div>
+      <div id="cpSlots" class="slots"></div>
+      <div class="cp-stage"><button class="mini" id="cpStPrev">◀</button><b id="cpStage"></b><button class="mini" id="cpStNext">▶</button><span id="cpStInfo"></span></div>
+      <div class="btns"><button class="btn sub2" id="cpLeave">나가기</button><button class="btn sub2" id="cpCmd">지휘관 바꾸기</button><button class="btn" id="cpGo">준비</button></div>
+    </div>
+    <div id="cpMsg" class="cp-msg"></div>
   </div>
 </div>
 
@@ -123,7 +178,7 @@ html,body{width:100%;height:100%;background:#0b0918;overflow:hidden;font-family:
 
 <div id="pause" class="ov">
   <div class="res">
-    <h1>일시정지</h1>
+    <h1 id="pauseTitle">일시정지</h1>
     <div class="btns"><button class="btn sub" id="toLobby">로비로</button><button class="btn" id="resume">계속하기</button></div>
   </div>
 </div>
@@ -140,6 +195,7 @@ html,body{width:100%;height:100%;background:#0b0918;overflow:hidden;font-family:
 
 <script src="https://cdn.jsdelivr.net/npm/pixi.js@8.23.0/dist/pixi.min.js"></script>
 <script src="../common/arcade.js" onerror="this.remove()"></script>
+<script src="net.js"></script>
 <script src="game.js"></script>
 </body>
 </html>
