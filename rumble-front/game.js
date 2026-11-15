@@ -111,49 +111,69 @@ function talentsOf(cmdKey) { const c = save.cmds[cmdKey], t = {}; TALENTS[cmdKey
 
 function mulberry32(a) { return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
 
-/* ================= 시뮬레이션 (결정론) ================= */
-let G = null;
-function newGame(stage, cmdKey, seed, opts) {
+/* ================= 시뮬레이션 (결정론) =================
+ * 모든 기기가 같은 입력으로 같은 결과를 계산한다 (락스텝).
+ * 그래서 이 구역에서는 Math.random·Math.hypot 등 기기마다 다를 수 있는 함수를 쓰지 않는다.
+ */
+const OWN_COL = ['#5faaff', '#6adf7a', '#ffa04a', '#c78aff'];
+const TURN = 3, LAG = 2;              // 멀티: 3틱(0.15초)마다 한 묶음, 2묶음 앞서 확정
+const hyp = (x, y) => Math.sqrt(x * x + y * y);
+let G = null, ME = 0, NETMODE = false;
+
+function profileOf(cmd) {
+  const units = {}; DECK.forEach(k => units[k] = save.units[k].lvl);
+  return { cmd, lv: { units, cmd: save.cmds[cmd].lvl }, tal: talentsOf(cmd) };
+}
+function newGame(stage, roster, seed, opts) {
   opts = opts || {};
-  const st = STAGES[stage];
+  const st = STAGES[stage], n = roster.length;
   const g = {
-    stage, st, ch: st.ch, cmdKey, seed, tick: 0, time: 0, rng: mulberry32(seed), nextId: 1,
+    stage, st, ch: st.ch, seed, tick: 0, time: 0, rng: mulberry32(seed), nextId: 1, n,
     units: [], structs: [], projs: [], spawnQ: [], inputs: [],
-    mana: 7, manaMax: 20, waveIdx: 0, waveTimer: 4, ult: 0, invuln: 0, heroRespawn: 0,
-    cardCd: [0, 0, 0, 0, 0, 0], auto: false, autoIdx: 0, over: null, overT: 0, players: 1, bossSpawned: false,
-    lv: { units: {}, cmd: save.cmds[cmdKey].lvl }, tal: opts.tal || talentsOf(cmdKey),
-    stats: { kills: {}, deploys: {}, cmdKills: 0, enemyKills: 0, captured: 0, bossKilled: false },
+    waveIdx: 0, waveTimer: 4, invuln: 0, over: null, overT: 0, bossSpawned: false, lastUlt: null,
+    stats: { enemyKills: 0, captured: 0, bossKilled: false },
   };
-  DECK.forEach(k => g.lv.units[k] = save.units[k].lvl);
-  if (opts.lv) { DECK.forEach(k => g.lv.units[k] = opts.lv); g.lv.cmd = opts.lv; }
-  const T = g.tal;
-  if (g.cmdKey === 'druid' && T[0] === 'b') g.mana += 4;
-  if (g.cmdKey === 'druid' && T[2] === 'a') g.manaMax = 25;
-  const diff = 1 + .15 * (stage - 1);
+  const roles = new Set(roster.map(r => r.cmd));
+  g.aura = { guardian: roles.has('guardian'), witch: roles.has('witch'), druid: roles.has('druid'), trinity: roles.size === 3 };
+  g.P = roster.map((r, i) => {
+    const T = r.tal || {};
+    const p = { i, uid: r.uid, nm: r.nm, cmdKey: r.cmd, lv: r.lv, tal: T, mana: 7, manaMax: 20, ult: 0, hero: null, heroRespawn: 0,
+      cardCd: [0, 0, 0, 0, 0, 0], auto: false, autoIdx: 0, left: false, stats: { kills: {}, deploys: {}, cmdKills: 0 } };
+    if (r.cmd === 'druid' && T[0] === 'b') p.mana += 4;
+    if (r.cmd === 'druid' && T[2] === 'a') p.manaMax = 25;
+    return p;
+  });
+  const anyTal = (cmd, i, o) => g.P.some(p => p.cmdKey === cmd && p.tal[i] === o);
+  g.regen = anyTal('druid', 2, 'b');
+  g.cap = n === 1 ? 60 : n === 2 ? 40 : 30;          // 플레이어당 병력 상한
+  const diff = 1 + .15 * (stage - 1), sm = 1 + .7 * (n - 1);
   g.diff = diff;
-  g.eMult = (1 + .09 * (stage - 1)) * (1 + .6 * (g.players - 1));
-  g.eCount = 1 + .4 * (g.players - 1);
+  g.eMult = (1 + .09 * (stage - 1)) * (1 + .55 * (n - 1));   // 인원수만큼 적 강화
+  g.eCount = 1 + .55 * (n - 1);
   const S = (o) => { o.id = g.nextId++; o.alive = true; o.cd = 0; o.flash = 0; g.structs.push(o); return o; };
-  const bhp = 2500 * (1 + .1 * (stage - 1)) * (g.cmdKey === 'guardian' && T[2] === 'a' ? 1.3 : 1);
+  const bhp = 2500 * (1 + .1 * (stage - 1)) * (1 + .3 * (n - 1)) * (anyTal('guardian', 2, 'a') ? 1.3 : 1);
   g.base = S({ team: 0, kind: 'base', x: 64, y: 305, hp: bhp, maxhp: bhp, r: 38, atk: 22 * (1 + .1 * (stage - 1)), range: 175, rate: 1.2 });
-  S({ team: 1, kind: 'outpost', x: 612, y: 305, hp: 3200 * diff, maxhp: 3200 * diff, r: 28, atk: 17 * diff, range: 185, rate: 1.3 });
-  S({ team: 1, kind: 'outpost', x: 748, y: 305, hp: 3600 * diff, maxhp: 3600 * diff, r: 28, atk: 18 * diff, range: 185, rate: 1.3 });
-  g.core = S({ team: 1, kind: 'core', x: 888, y: 305, hp: 8000 * diff, maxhp: 8000 * diff, r: 44, atk: 26 * diff, range: 210, rate: 1.5 });
-  spawnHero(g);
+  S({ team: 1, kind: 'outpost', x: 612, y: 305, hp: 3200 * diff * sm, maxhp: 3200 * diff * sm, r: 28, atk: 17 * diff, range: 185, rate: 1.3 });
+  S({ team: 1, kind: 'outpost', x: 748, y: 305, hp: 3600 * diff * sm, maxhp: 3600 * diff * sm, r: 28, atk: 18 * diff, range: 185, rate: 1.3 });
+  g.core = S({ team: 1, kind: 'core', x: 888, y: 305, hp: 8000 * diff * sm, maxhp: 8000 * diff * sm, r: 44, atk: 26 * diff, range: 210, rate: 1.5 });
+  g.P.forEach(p => spawnHero(g, p));
   return g;
 }
+function soloRoster() { return [{ uid: 'me', nm: '나', ...profileOf(save.cmd) }]; }
 
-function makeUnit(g, team, type, def, x, y, m) {
-  const ranged = !!def.proj, T = g.tal;
+function makeUnit(g, team, type, def, x, y, m, p) {
+  const ranged = !!def.proj;
   let range = def.range, rate = def.rate, aoe = def.aoe || 0, hp = def.hp * m, atk = def.atk * m, heal = def.heal ? def.heal * m : 0;
-  if (team === 0) {
-    if (ranged && g.cmdKey === 'witch') range *= 1.2;
-    if (g.cmdKey === 'guardian') { if (type === 'knight' && T[0] === 'a') hp *= 1.2; if (type === 'footman' && T[0] === 'b') atk *= 1.2; }
-    if (g.cmdKey === 'witch') { if (type === 'mage' && T[0] === 'a') aoe *= 1.25; if (type === 'archer' && T[0] === 'b') rate *= .8; if (type === 'hero_witch' && T[2] === 'b') { range *= 1.25; atk *= 1.3; } }
-    if (g.cmdKey === 'druid' && type === 'priest' && T[0] === 'a') heal *= 1.3;
+  if (team === 0 && p) {
+    const T = p.tal, c = p.cmdKey;
+    if (g.aura.trinity) { hp *= 1.05; atk *= 1.05; heal *= 1.05; }
+    if (ranged && g.aura.witch) range *= 1.2;
+    if (c === 'guardian') { if (type === 'knight' && T[0] === 'a') hp *= 1.2; if (type === 'footman' && T[0] === 'b') atk *= 1.2; }
+    if (c === 'witch') { if (type === 'mage' && T[0] === 'a') aoe *= 1.25; if (type === 'archer' && T[0] === 'b') rate *= .8; if (type === 'hero_witch' && T[2] === 'b') { range *= 1.25; atk *= 1.3; } }
+    if (c === 'druid' && type === 'priest' && T[0] === 'a') heal *= 1.3;
   }
   const u = {
-    id: g.nextId++, team, type, x, y, vx: 0, vy: 0, hp, maxhp: hp, atk, rate, range, spd: def.spd, r: def.r,
+    id: g.nextId++, team, type, o: p ? p.i : -1, x, y, vx: 0, vy: 0, hp, maxhp: hp, atk, rate, range, spd: def.spd, r: def.r,
     kb: def.kb || 0, proj: def.proj || null, aoe, heal, siege: def.siege || 1, cleave: def.cleave || 0,
     boss: !!def.boss, fly: !!def.fly, armor: def.armor || 0, summon: !!def.summon, breath: !!def.breath, sk: 4,
     cd: .3 + g.rng() * .5, target: null, flash: 0, atk_t: 0, walk: g.rng() * 4, alive: true, moving: false, evo: false,
@@ -161,72 +181,84 @@ function makeUnit(g, team, type, def, x, y, m) {
   g.units.push(u);
   return u;
 }
-function spawnHero(g) {
-  const c = CMDS[g.cmdKey];
-  const u = makeUnit(g, 0, 'hero_' + g.cmdKey, c, 118, 305, lvlMult(g.lv.cmd));
-  u.hero = true; g.hero = u;
+function spawnHero(g, p) {
+  const c = CMDS[p.cmdKey];
+  const y = 305 + (p.i - (g.n - 1) / 2) * 44;
+  const u = makeUnit(g, 0, 'hero_' + p.cmdKey, c, 118, y, lvlMult(p.lv.cmd), p);
+  u.hero = true; p.hero = u;
   fxBurst(u.x, u.y - 20, '#ffe68a', 18, 120);
 }
 
-function queueInput(inp) { if (!G || G.over) return; inp.t = G.tick + 1; G.inputs.push(inp); }
 function applyInput(g, inp) {
-  if (inp.type === 'card') deploy(g, inp.slot, inp.x, inp.y);
-  else if (inp.type === 'ult') castUlt(g);
-  else if (inp.type === 'auto') g.auto = !g.auto;
+  const pi = inp.p | 0, p = g.P[pi];
+  if (!p) return;
+  if (inp.type === 'card') deploy(g, pi, inp.slot | 0, inp.x, inp.y);
+  else if (inp.type === 'ult') castUlt(g, pi);
+  else if (inp.type === 'auto') p.auto = !p.auto;
+  else if (inp.type === 'leave' && !p.left) { p.left = true; p.auto = true; banner(p.nm + ' 님이 나갔어요 · 자동 전투로 전환', '#ffb2b2'); }
 }
 function deployMax(g) {
   let m = 330;
   for (const s of g.structs) if (s.alive && s.team === 0 && s.kind === 'outpost') m = Math.max(m, s.x - 40);
   return m;
 }
-function deploy(g, slot, px, py) {
-  const k = DECK[slot], d = UNITS[k];
-  if (g.mana < d.cost || g.cardCd[slot] > 0) return false;
-  g.mana -= d.cost; g.cardCd[slot] = .7;
-  const lv = g.lv.units[k], m = lvlMult(lv);
+function ownCount(g, pi) { let c = 0; for (const u of g.units) if (u.o === pi && !u.hero) c++; return c; }
+function deploy(g, pi, slot, px, py) {
+  const p = g.P[pi], k = DECK[slot], d = UNITS[k];
+  if (!d || p.mana < d.cost || p.cardCd[slot] > 0) return false;
+  if (ownCount(g, pi) + d.count > g.cap) { if (pi === ME) floatTxt(UI.card(slot).x + 32, 452, '병력이 너무 많아요', '#ff9a9a'); return false; }
+  p.mana -= d.cost; p.cardCd[slot] = .7;
+  const lv = p.lv.units[k] || 1, m = lvlMult(lv);
   const placed = px != null;
   const cx = placed ? Math.max(100, Math.min(deployMax(g), px)) : 0;
   const cy = placed ? Math.max(FT + 6, Math.min(FB - 6, py)) : 0;
   for (let i = 0; i < d.count; i++) {
     const x = placed ? cx + (g.rng() - .5) * 26 : 104 + g.rng() * 24;
     const y = placed ? Math.max(FT, Math.min(FB, cy + (g.rng() - .5) * 34)) : FT + 18 + g.rng() * (FB - FT - 36);
-    const u = makeUnit(g, 0, k, d, x, y, m);
+    const u = makeUnit(g, 0, k, d, x, y, m, p);
     u.evo = lv >= EVO_LV;
     fxSpawn(u.x, u.y, placed);
   }
-  g.stats.deploys[k] = (g.stats.deploys[k] || 0) + 1;
-  sfx('deploy');
+  p.stats.deploys[k] = (p.stats.deploys[k] || 0) + 1;
+  if (pi === ME) sfx('deploy');
   return true;
 }
 
-function castUlt(g) {
-  if (g.ult < 100 || !g.hero || !g.hero.alive) return;
-  g.ult = 0;
-  const h = g.hero, T = g.tal;
-  if (g.cmdKey === 'guardian') {
-    g.invuln = T[1] === 'a' ? 4 : 3;
-    const pm = T[1] === 'b' ? 3 : 1.5;
+function castUlt(g, pi) {
+  const p = g.P[pi];
+  if (p.ult < 100 || !p.hero || !p.hero.alive) return;
+  p.ult = 0;
+  const h = p.hero, T = p.tal;
+  // 합동 궁극기: 다른 지휘관이 3초 안에 궁극기를 쓰면 효과 1.5배
+  const combo = g.lastUlt && g.lastUlt.p !== pi && g.time - g.lastUlt.t <= 3;
+  const cm = combo ? 1.5 : 1;
+  g.lastUlt = { t: g.time, p: pi };
+  if (combo) { banner('합동 궁극기! 효과 1.5배', '#ffe68a'); fxRing(h.x, h.y - 10, '#fff2b0', 320); }
+  if (p.cmdKey === 'guardian') {
+    g.invuln = Math.max(g.invuln, (T[1] === 'a' ? 4 : 3) * (combo ? 1.25 : 1));
+    const pm = (T[1] === 'b' ? 3 : 1.5) * cm;
     for (const e of g.units) if (e.alive && e.team === 1) {
-      const dx = e.x - h.x, dy = e.y - h.y, d = Math.hypot(dx, dy);
+      const dx = e.x - h.x, dy = e.y - h.y, d = hyp(dx, dy);
       if (d < 230) { e.vx += (e.boss ? 60 : 260) * (dx > 0 ? 1 : -1); damage(g, h, e, h.atk * pm, { nokb: true, magic: true }); }
     }
-    fxRing(h.x, h.y - 10, '#ffd45c', 230); shake(10); banner('불굴의 함성!', '#ffd45c');
-  } else if (g.cmdKey === 'witch') {
+    fxRing(h.x, h.y - 10, '#ffd45c', 230); banner(p.nm === '나' ? '불굴의 함성!' : p.nm + ': 불굴의 함성!', '#ffd45c');
+  } else if (p.cmdKey === 'witch') {
     const foes = g.units.filter(e => e.alive && e.team === 1);
-    const n = T[1] === 'a' ? 20 : 14, dm = h.atk * 4.2 * (T[1] === 'b' ? 1.4 : 1);
+    const n = T[1] === 'a' ? 20 : 14, dm = h.atk * 4.2 * (T[1] === 'b' ? 1.4 : 1) * cm;
     for (let i = 0; i < n; i++) {
       let tx, ty;
       if (foes.length) { const e = foes[Math.floor(g.rng() * foes.length)]; tx = e.x + (g.rng() - .5) * 30; ty = e.y + (g.rng() - .5) * 20; }
       else { tx = 420 + g.rng() * 420; ty = FT + g.rng() * (FB - FT); }
-      g.spawnQ.push({ t: g.time + i * .08, bolt: true, x: tx, y: ty, dmg: dm });
+      g.spawnQ.push({ t: g.time + i * .08, bolt: true, x: tx, y: ty, dmg: dm, p: pi });
     }
-    banner('번개 폭풍!', '#c9a5ff');
+    banner(p.nm === '나' ? '번개 폭풍!' : p.nm + ': 번개 폭풍!', '#c9a5ff');
   } else {
-    const hr = T[1] === 'a' ? 1 : .6;
+    const hr = Math.min(1, (T[1] === 'a' ? 1 : .6) * cm);
     for (const a of g.units) if (a.alive && a.team === 0) { a.hp = Math.min(a.maxhp, a.hp + a.maxhp * hr); fxHeal(a.x, a.y - 14); }
-    g.base.hp = Math.min(g.base.maxhp, g.base.hp + 150);
-    g.mana = Math.min(g.manaMax, g.mana + (T[1] === 'b' ? 8 : 5));
-    fxRing(h.x, h.y - 10, '#7dff9a', 400); banner('생명의 숲!', '#7dff9a');
+    g.base.hp = Math.min(g.base.maxhp, g.base.hp + 150 * cm);
+    const mg = Math.round((T[1] === 'b' ? 8 : 5) * cm);
+    for (const q of g.P) q.mana = Math.min(q.manaMax, q.mana + mg);    // 지원: 팀 전원에게 자원
+    fxRing(h.x, h.y - 10, '#7dff9a', 400); banner((p.nm === '나' ? '' : p.nm + ': ') + '생명의 숲! 모두 자원 +' + mg, '#7dff9a');
   }
   sfx('ult');
 }
@@ -240,24 +272,22 @@ function pickEnemy(g, w) {
 }
 function waveComp(g, w) {
   const list = [];
-  // 웨이브 예산제: 강한 적일수록 비용이 커서 마릿수가 줄어든다
   let budget = (3 + Math.floor(w * .6) + Math.floor(g.stage * .5)) * 1.3 * g.eCount;
   while (budget > .5) { const t = pickEnemy(g, w); list.push(t); budget -= COST[t]; }
-  if (g.st.mini && (w === 8 || w === 16)) list.push(g.st.mini);
+  if (g.st.mini && (w === 8 || w === 16)) for (let i = 0; i < Math.ceil(g.n / 2); i++) list.push(g.st.mini);
   return list;
 }
 function spawnEnemy(g, t, x, y, guard) {
   y = y != null ? y : FT + 14 + g.rng() * (FB - FT - 28);
-  const u = makeUnit(g, 1, t, ENEMIES[t], x != null ? x : 846 + g.rng() * 20, y, g.eMult * (1 + .015 * Math.min(g.waveIdx, WAVES)) * (guard ? 1.1 : 1));
-  if (u.boss || guard) { banner((guard ? '수문장 등장! ' : '보스 등장! ') + ENEMIES[t].name, '#ff6b6b'); shake(8); sfx('boss'); }
+  const u = makeUnit(g, 1, t, ENEMIES[t], x != null ? x : 846 + g.rng() * 20, y, g.eMult * (1 + .015 * Math.min(g.waveIdx, WAVES)) * (guard ? 1.1 : 1), null);
+  if (u.boss || guard) { banner((guard ? '수문장 등장! ' : '보스 등장! ') + ENEMIES[t].name, '#ff6b6b'); sfx('boss'); }
   return u;
 }
-// 핵심 성의 보호막이 깨지면 수문장(보스)이 나타난다
 function spawnGuardian(g) {
   g.bossSpawned = true;
   const b = spawnEnemy(g, g.st.boss, 850, 305, true);
-  b.guardian = true; g.guardianUnit = b;
-  for (let i = 0; i < 2 + Math.floor(g.stage / 4); i++) g.spawnQ.push({ t: g.time + .5 + i * .3, enemy: pickEnemy(g, 10) });
+  b.guardian = true;
+  for (let i = 0; i < 2 + Math.floor(g.stage / 4) + (g.n - 1) * 2; i++) g.spawnQ.push({ t: g.time + .5 + i * .3, enemy: pickEnemy(g, 10) });
 }
 
 /* --- 공간 해시 --- */
@@ -294,7 +324,7 @@ function findTarget(g, u) {
   let best = null, bd = 1e9;
   near(u.x, u.y, aggro, v => {
     if (v.team === u.team || !v.alive || !canHit(u, v)) return;
-    const d = Math.hypot(v.x - u.x, (v.y - u.y) * 1.3);
+    const d = hyp(v.x - u.x, (v.y - u.y) * 1.3);
     if (d < aggro && d < bd) { bd = d; best = v; }
   });
   return best || frontStruct(g, u.team);
@@ -304,39 +334,43 @@ function findHealTarget(g, u) {
   near(u.x, u.y, u.range + 30, v => {
     if (v.team !== u.team || !v.alive || v === u) return;
     const r = v.hp / v.maxhp;
-    if (r < bh && Math.hypot(v.x - u.x, v.y - u.y) < u.range + 30) { bh = r; best = v; }
+    if (r < bh && hyp(v.x - u.x, v.y - u.y) < u.range + 30) { bh = r; best = v; }
   });
   return best;
 }
 function distTo(u, t) {
   if (t.kind) return Math.abs(u.x - t.x) - t.r - u.r;
-  return Math.hypot(t.x - u.x, t.y - u.y) - t.r - u.r;
+  return hyp(t.x - u.x, t.y - u.y) - t.r - u.r;
 }
 
 function step(g) {
-  buildGrid(g);   // 이전 틱의 격자가 다른 게임 상태와 섞이지 않도록 매 틱 시작 시 재구성
+  buildGrid(g);
   if (g.inputs.length) {
     const now = g.inputs.filter(i => i.t <= g.tick);
     g.inputs = g.inputs.filter(i => i.t > g.tick);
     for (const i of now) applyInput(g, i);
   }
-  const dt = TICK, T = g.tal;
+  const dt = TICK;
   g.tick++; g.time = g.tick * dt;
   if (g.over) { g.overT += dt; return; }
 
   const caps = g.structs.filter(s => s.team === 0 && s.kind === 'outpost' && s.alive).length;
-  g.mana = Math.min(g.manaMax, g.mana + dt * .58 * (g.cmdKey === 'druid' ? 1.2 : 1) * (1 + .15 * caps));
-  for (let i = 0; i < 6; i++) g.cardCd[i] = Math.max(0, g.cardCd[i] - dt);
+  const regen = dt * .58 * (g.aura.druid ? 1.2 : 1) * (1 + .15 * caps);
+  for (const p of g.P) {
+    p.mana = Math.min(p.manaMax, p.mana + regen);
+    for (let i = 0; i < 6; i++) p.cardCd[i] = Math.max(0, p.cardCd[i] - dt);
+    if (p.hero && p.hero.alive) p.ult = Math.min(100, p.ult + dt * 1.7 * (p.cmdKey === 'witch' && p.tal[2] === 'a' ? 1.3 : 1));
+  }
   g.invuln = Math.max(0, g.invuln - dt);
-  if (g.hero && g.hero.alive) g.ult = Math.min(100, g.ult + dt * 1.7 * (g.cmdKey === 'witch' && T[2] === 'a' ? 1.3 : 1));
-  if (g.cmdKey === 'druid' && T[2] === 'b' && g.tick % 20 === 0) for (const a of g.units) if (a.alive && a.team === 0) a.hp = Math.min(a.maxhp, a.hp + a.maxhp * .01);
+  if (g.regen && g.tick % 20 === 0) for (const a of g.units) if (a.alive && a.team === 0) a.hp = Math.min(a.maxhp, a.hp + a.maxhp * .01);
 
-  if (g.auto) {
-    const k = AUTO_ORDER[g.autoIdx % AUTO_ORDER.length], slot = DECK.indexOf(k);
-    if (g.mana >= UNITS[k].cost && g.cardCd[slot] <= 0) { deploy(g, slot); g.autoIdx++; }
-    if (g.ult >= 100 && g.hero && g.hero.alive) {
-      let n = 0; for (const e of g.units) if (e.alive && e.team === 1 && e.x < g.hero.x + 260) n++;
-      if (n >= 6 || g.hero.hp < g.hero.maxhp * .35) castUlt(g);
+  for (const p of g.P) {
+    if (!p.auto) continue;
+    const k = AUTO_ORDER[p.autoIdx % AUTO_ORDER.length], slot = DECK.indexOf(k);
+    if (p.mana >= UNITS[k].cost && p.cardCd[slot] <= 0) { if (deploy(g, p.i, slot)) p.autoIdx++; else if (ownCount(g, p.i) + UNITS[k].count > g.cap) p.autoIdx++; }
+    if (p.ult >= 100 && p.hero && p.hero.alive) {
+      let n = 0; for (const e of g.units) if (e.alive && e.team === 1 && e.x < p.hero.x + 260) n++;
+      if (n >= 6 || p.hero.hp < p.hero.maxhp * .35) castUlt(g, p.i);
     }
   }
 
@@ -359,10 +393,12 @@ function step(g) {
     g.spawnQ = rest;
   }
 
-  if (g.hero && !g.hero.alive) {
-    if (g.heroRespawn <= 0) g.heroRespawn = (g.cmdKey === 'guardian' && T[2] === 'b') ? 6 : 12;
-    g.heroRespawn -= dt;
-    if (g.heroRespawn <= 0) spawnHero(g);
+  for (const p of g.P) {
+    if (p.hero && !p.hero.alive) {
+      if (p.heroRespawn <= 0) p.heroRespawn = (p.cmdKey === 'guardian' && p.tal[2] === 'b') ? 6 : 12;
+      p.heroRespawn -= dt;
+      if (p.heroRespawn <= 0) spawnHero(g, p);
+    }
   }
 
   buildGrid(g);
@@ -370,7 +406,6 @@ function step(g) {
   for (const u of g.units) {
     if (!u.alive) continue;
     u.cd -= dt; u.flash -= dt; u.atk_t -= dt;
-    // 보스 특수 능력
     if (u.summon || u.breath) {
       u.sk -= dt;
       if (u.sk <= 0) {
@@ -384,12 +419,12 @@ function step(g) {
     if (u.heal) { const ht = findHealTarget(g, u); if (ht) { t = ht; healing = true; } }
     u.moving = false;
     if (t) {
-      const d = healing ? Math.hypot(t.x - u.x, t.y - u.y) - 10 : distTo(u, t);
+      const d = healing ? hyp(t.x - u.x, t.y - u.y) - 10 : distTo(u, t);
       if (d <= u.range) {
         if (u.cd <= 0) { u.cd = u.rate; u.atk_t = .22; attack(g, u, t, healing); }
       } else {
         const tx = t.x, ty = t.kind ? u.y : t.y;
-        const dx = tx - u.x, dy = ty - u.y, dd = Math.hypot(dx, dy) || 1;
+        const dx = tx - u.x, dy = ty - u.y, dd = hyp(dx, dy) || 1;
         u.x += dx / dd * u.spd * dt; u.y += dy / dd * u.spd * dt;
         u.moving = true; u.walk += dt * u.spd * .11;
       }
@@ -401,7 +436,7 @@ function step(g) {
     if (!u.alive) continue;
     near(u.x, u.y, u.r + 28, v => {
       if (v.id <= u.id || !v.alive || v.fly !== u.fly) return;
-      const dx = v.x - u.x, dy = v.y - u.y, d = Math.hypot(dx, dy) || .01, min = (u.r + v.r) * .9;
+      const dx = v.x - u.x, dy = v.y - u.y, d = hyp(dx, dy) || .01, min = (u.r + v.r) * .9;
       if (d < min) {
         const p = (min - d) * .5, nx = dx / d, ny = dy / d;
         const wu = v.r / (u.r + v.r), wv = u.r / (u.r + v.r);
@@ -451,7 +486,7 @@ function breath(g, u) {
     const dx = (v.x - u.x) * dir, dy = Math.abs(v.y - u.y);
     if (dx > 0 && dx < 190 && dy < 30 + dx * .45) damage(g, u, v, u.atk * 1.0, { magic: true });
   });
-  fxBreath(u.x + dir * 30, u.y - 40, dir); shake(7); sfx('boom');
+  fxBreath(u.x + dir * 30, u.y - 40, dir); sfx('boom');
 }
 
 function attack(g, u, t, healing) {
@@ -459,9 +494,9 @@ function attack(g, u, t, healing) {
   if (u.proj) { shoot(g, u, t, u.proj, u.atk, u.aoe, u.siege); if (u.proj === 'arrow') sfx('bow'); return; }
   if (u.cleave) {
     const cx = t.x, cy = t.kind ? u.y : t.y;
-    near(cx, cy, u.cleave + 20, v => { if (v.team !== u.team && v.alive && canHit(u, v) && Math.hypot(v.x - cx, v.y - cy) < u.cleave + v.r) damage(g, u, v, u.atk); });
+    near(cx, cy, u.cleave + 20, v => { if (v.team !== u.team && v.alive && canHit(u, v) && hyp(v.x - cx, v.y - cy) < u.cleave + v.r) damage(g, u, v, u.atk); });
     if (t.kind) damage(g, u, t, u.atk * u.siege);
-    fxSlam(cx, cy, u.boss ? '#ffb27a' : '#d8f0ff', u.cleave); shake(u.boss ? 6 : 3); sfx('slam');
+    fxSlam(cx, cy, u.boss ? '#ffb27a' : '#d8f0ff', u.cleave); sfx('slam');
   } else {
     damage(g, u, t, t.kind ? u.atk * u.siege : u.atk);
     fxHit(t.kind ? t.x - (u.team === 0 ? t.r : -t.r) : t.x, t.kind ? u.y - 12 : t.y - 12, u.team === 0 ? '#ffe9a8' : '#ff9a9a');
@@ -475,7 +510,7 @@ function shoot(g, src, tgt, kind, dmg, aoe, siege, fromStruct, heal) {
   const sx = src.x + (src.team === 0 ? 10 : -10), sy = fromStruct ? src.y - src.r - 20 : src.y - 18 - (src.fly ? 26 : 0) - (src.boss ? 20 : 0);
   const tx = tgt.kind ? tgt.x - (src.team === 0 ? tgt.r * .6 : -tgt.r * .6) : tgt.x;
   const ty = tgt.kind ? src.y - 10 : tgt.y - 12 - (tgt.fly ? 26 : 0);
-  const d = Math.hypot(tx - sx, ty - sy);
+  const d = hyp(tx - sx, ty - sy);
   g.projs.push({ id: g.nextId++, kind, sx, sy, tx, ty, tgt, t: 0, dur: Math.max(.12, d / speed), dmg, aoe, siege: siege || 1, team: src.team, src, heal: heal || 0, arc: kind === 'rock' ? 70 : kind === 'arrow' ? 22 : 0, magic: kind !== 'arrow' && kind !== 'rock' });
 }
 
@@ -485,9 +520,9 @@ function impact(g, p) {
     return;
   }
   if (p.aoe) {
-    near(p.tx, p.ty, p.aoe + 30, v => { if (v.team !== p.team && v.alive && Math.hypot(v.x - p.tx, (v.y - (v.fly ? 26 : 0)) - p.ty) < p.aoe + v.r) damage(g, p.src, v, p.dmg, { magic: p.magic }); });
+    near(p.tx, p.ty, p.aoe + 30, v => { if (v.team !== p.team && v.alive && hyp(v.x - p.tx, (v.y - (v.fly ? 26 : 0)) - p.ty) < p.aoe + v.r) damage(g, p.src, v, p.dmg, { magic: p.magic }); });
     for (const s of g.structs) if (s.alive && s.team !== p.team && Math.abs(s.x - p.tx) < s.r + p.aoe * .6) damage(g, p.src, s, p.dmg * p.siege);
-    fxExplode(p.tx, p.ty, p.kind); shake(p.kind === 'rock' ? 4 : 2); sfx(p.kind === 'rock' ? 'boom' : 'magic');
+    fxExplode(p.tx, p.ty, p.kind); sfx(p.kind === 'rock' ? 'boom' : 'magic');
   } else if (p.tgt && p.tgt.alive) {
     damage(g, p.src, p.tgt, p.tgt.kind ? p.dmg * p.siege : p.dmg, { magic: p.magic });
     fxHit(p.tx, p.ty, p.kind === 'bolt' ? '#d9c2ff' : '#fff2c0', 5);
@@ -495,10 +530,11 @@ function impact(g, p) {
 }
 
 function lightning(g, q) {
-  const src = g.hero || { team: 0, kb: 0 };
-  near(q.x, q.y, 70, v => { if (v.team === 1 && v.alive && Math.hypot(v.x - q.x, v.y - q.y) < 46 + v.r) damage(g, src, v, q.dmg, { magic: true }); });
+  const caster = g.P[q.p | 0];
+  const src = (caster && caster.hero) || { team: 0, kb: 0, o: q.p | 0 };
+  near(q.x, q.y, 70, v => { if (v.team === 1 && v.alive && hyp(v.x - q.x, v.y - q.y) < 46 + v.r) damage(g, src, v, q.dmg, { magic: true }); });
   for (const s of g.structs) if (s.alive && s.team === 1 && Math.abs(s.x - q.x) < s.r + 30) damage(g, src, s, q.dmg * .8);
-  fxBolt(q.x, q.y); shake(3); sfx('zap');
+  fxBolt(q.x, q.y); sfx('zap');
 }
 
 function damage(g, src, t, dmg, opt) {
@@ -507,7 +543,7 @@ function damage(g, src, t, dmg, opt) {
   if (t.kind) {
     if (t.kind === 'core' && coreShielded(g)) { dmg *= .1; fxShield(t); }
   } else {
-    if (t.team === 0) { if (g.invuln > 0) dmg = 0; else if (g.cmdKey === 'guardian') dmg *= .85; }
+    if (t.team === 0) { if (g.invuln > 0) dmg = 0; else if (g.aura.guardian) dmg *= .85; }
     if (t.armor && !opt.magic) { dmg *= (1 - t.armor); if (Math.random() < .3) fxHit(t.x, t.y - 16, '#c8c8d0', 3); }
   }
   if (dmg <= 0) return;
@@ -518,19 +554,20 @@ function damage(g, src, t, dmg, opt) {
     t.vx += dir * src.kb * 9; t.vy += (t.y - (src.y || t.y)) * .5;
   }
   if (t.hp <= 0) {
-    if (t.kind) structDown(g, t, src);
+    if (t.kind) structDown(g, t);
     else {
       t.alive = false;
       fxDeath(t);
       if (t.team === 1) {
         g.stats.enemyKills++;
         if (t.boss || t.guardian) { g.stats.bossKilled = true; banner(ENEMIES[t.type].name + ' 처치!', '#ffd45c'); }
-        if (src && src.team === 0) {
-          if (src.hero) g.stats.cmdKills++; else if (UNITS[src.type]) g.stats.kills[src.type] = (g.stats.kills[src.type] || 0) + 1;
-          g.ult = Math.min(100, g.ult + (t.boss ? 25 : 1.4));
+        const owner = src && src.team === 0 && src.o >= 0 ? g.P[src.o] : null;
+        if (owner) {
+          if (src.hero) owner.stats.cmdKills++; else if (UNITS[src.type]) owner.stats.kills[src.type] = (owner.stats.kills[src.type] || 0) + 1;
+          owner.ult = Math.min(100, owner.ult + (t.boss ? 25 : 1.4));
         }
-        if (t.boss) g.mana = Math.min(g.manaMax, g.mana + 6);
-      } else if (t.hero) { banner('지휘관 쓰러짐! ' + ((g.cmdKey === 'guardian' && g.tal[2] === 'b') ? 6 : 12) + '초 후 복귀', '#ff9a9a'); }
+        if (t.boss) for (const p of g.P) p.mana = Math.min(p.manaMax, p.mana + 6);
+      } else if (t.hero && t.o === ME) { const p = g.P[t.o]; banner('지휘관 쓰러짐! ' + ((p.cmdKey === 'guardian' && p.tal[2] === 'b') ? 6 : 12) + '초 후 복귀', '#ff9a9a'); }
     }
   }
 }
@@ -539,25 +576,33 @@ function structDown(g, s) {
   if (s.kind === 'outpost' && s.team === 1) {
     s.team = 0; s.maxhp *= .6; s.hp = s.maxhp * .7; s.atk *= .8; s.captured = true;
     g.stats.captured++;
-    banner('거점 점령! 자원 +15%', '#8fd0ff'); fxCapture(s); shake(9); sfx('capture');
+    banner('거점 점령! 자원 +15%', '#8fd0ff'); fxCapture(s); sfx('capture');
     if (!coreShielded(g)) banner('핵심 성의 보호막이 사라졌다!', '#ffd45c');
   } else {
-    s.hp = 0; s.alive = false; fxCollapse(s); shake(14); sfx('boom');
+    s.hp = 0; s.alive = false; fxCollapse(s); sfx('boom');
   }
 }
 
 function endGame(g, res) {
   if (g.over) return;
   g.over = res; g.overT = 0;
-  sfx(res === 'win' ? 'win' : 'lose');
-  if (typeof window !== 'undefined' && g === G) setTimeout(() => showResult(g), 1700);
+  if (g === G) { sfx(res === 'win' ? 'win' : 'lose'); setTimeout(() => showResult(g), 1700); }
+}
+
+// 동기화 확인용 상태 요약값 (모든 기기에서 같아야 한다)
+function stateHash(g) {
+  let h = g.nextId;
+  for (const u of g.units) h += u.x * 1.31 + u.y * .73 + u.hp * 1.07;
+  for (const s of g.structs) h += s.hp;
+  for (const p of g.P) h += p.mana * 3.1 + p.ult;
+  return h.toFixed(3);
 }
 
 /* ================= 효과 (렌더 전용) ================= */
 let parts = [], texts = [], banners = [], rings = [], bolts = [], corpses = [], shakeAmt = 0;
 const rnd = (a, b) => a + Math.random() * (b - a);
 const NOFX = { on: false };     // 헤드리스 밸런스 테스트 시 효과 생략
-function shake(n) { if (!NOFX.on) shakeAmt = Math.min(18, shakeAmt + n); }
+function shake() {}   // 화면 흔들림은 어지러움 때문에 사용하지 않음
 function P(o) { if (!NOFX.on && parts.length < 1100) parts.push(o); }
 function fxHit(x, y, c, n = 7) { for (let i = 0; i < n; i++) P({ x, y, vx: rnd(-140, 140), vy: rnd(-160, 40), life: rnd(.18, .35), max: .35, c, s: rnd(2, 4), g: 300, add: true }); }
 function fxBurst(x, y, c, n, sp) { for (let i = 0; i < n; i++) { const a = rnd(0, 6.28), v = rnd(sp * .3, sp); P({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: rnd(.3, .6), max: .6, c, s: rnd(2.5, 5), g: 0, add: true }); } }
@@ -581,7 +626,7 @@ function fxDeath(u) {
   for (let i = 0; i < (u.boss ? 60 : 12); i++) P({ x: u.x, y: y - 10, vx: rnd(-120, 120), vy: rnd(-200, -40), life: rnd(.4, .8), max: .8, c, s: rnd(3, u.boss ? 8 : 5), g: 500 });
   P({ x: u.x, y: y - 14, vx: 0, vy: -30, life: .5, max: .5, c: '#ffffff', s: u.r * 4, add: true, soft: true });
   if (corpses.length < 60) corpses.push({ type: u.type, x: u.x, y: u.y, fly: u.fly, flip: u.team === 1, sc: SCALE_OF[u.type] || 1, life: 1, max: 1, rot: (u.team === 0 ? -1 : 1) * rnd(.9, 1.4) });
-  if (u.boss) { shake(16); fxRing(u.x, u.y, '#ffb27a', 160); }
+  if (u.boss) fxRing(u.x, u.y, '#ffb27a', 160);
 }
 function fxBolt(x, y) { if (NOFX.on) return; bolts.push({ x, y, life: .25, max: .25, seg: Array.from({ length: 9 }, () => rnd(-14, 14)) }); fxBurst(x, y, '#e6d6ff', 14, 180); RG({ x, y, r: 4, R: 50, life: .3, max: .3, c: '#c9a5ff' }); P({ x, y: y - 10, vx: 0, vy: 0, life: .25, max: .25, c: '#d8c8ff', s: 110, soft: true, add: true }); }
 function fxShield(s) { if (Math.random() < .3) RG({ x: s.x, y: s.y - 30, r: s.r + 30, R: s.r + 40, life: .25, max: .25, c: '#b98cff' }); }
@@ -1024,8 +1069,6 @@ function unitView(u) {
 let frameNo = 0;
 function renderWorld(dt, t) {
   const g = G; frameNo++;
-  shakeAmt *= Math.pow(.02, dt);
-  L_.world.position.set((Math.random() - .5) * shakeAmt, (Math.random() - .5) * shakeAmt);
   // 건물
   for (const s of g.structs) {
     const v = structViews.get(s.id);
@@ -1050,7 +1093,7 @@ function renderWorld(dt, t) {
     v.sh.alpha = u.fly ? .5 : 1;
     v.ring.visible = !u.boss;
     v.ring.position.set(u.x, u.y); v.ring.width = u.r * 2.2; v.ring.height = u.r * .8;
-    v.ring.tint = u.team === 0 ? (u.hero ? 0xffd45c : 0x5faaff) : 0xff5050; v.ring.alpha = u.hero ? 1 : .75;
+    v.ring.tint = u.team === 0 ? (u.hero ? 0xffd45c : hex(OWN_COL[u.o] || OWN_COL[0])) : 0xff5050; v.ring.alpha = u.hero ? 1 : .75;
     const inv = g.invuln > 0 && u.team === 0;
     v.aura.visible = u.evo || inv || u.boss;
     if (v.aura.visible) { v.aura.tint = inv ? 0xffd45c : u.boss ? 0xff4a2a : 0xffe68a; v.aura.position.set(0, -32 * sc); v.aura.scale.set(sc * (1.2 + Math.sin(t * 4 + u.id) * .08)); v.aura.alpha = inv ? .55 : u.boss ? .35 : .4; }
@@ -1235,7 +1278,7 @@ function drawOverlay(dt, t) {
 }
 
 function drawHUD(t) {
-  const g = G;
+  const g = G, P = g.P[ME];
   let gr = ctx.createLinearGradient(0, 446, 0, H); gr.addColorStop(0, 'rgba(20,14,40,.0)'); gr.addColorStop(.25, 'rgba(20,14,40,.88)'); gr.addColorStop(1, 'rgba(10,8,24,.96)');
   ctx.fillStyle = gr; ctx.fillRect(0, 440, W, H - 440);
   R(ctx, 14, 470, 18, 18, 3, '#e0a030', 1.5);
@@ -1243,51 +1286,51 @@ function drawHUD(t) {
   text(Math.max(0, Math.round(g.base.hp)).toLocaleString(), 186, 479, 12, '#fff', 'right', 3);
   R(ctx, 14, 496, 18, 18, 9, '#3d8bff', 1.5);
   ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillRect(37, 498, 152, 14);
-  const cw = 150 / g.manaMax;
-  for (let i = 0; i < g.manaMax; i++) {
-    const fill = Math.max(0, Math.min(1, g.mana - i));
+  const cw = 150 / P.manaMax;
+  for (let i = 0; i < P.manaMax; i++) {
+    const fill = Math.max(0, Math.min(1, P.mana - i));
     ctx.fillStyle = 'rgba(80,140,255,.25)'; ctx.fillRect(38 + i * cw, 499, cw - 1, 12);
     if (fill > 0) { ctx.fillStyle = fill >= 1 ? '#4aa8ff' : 'rgba(74,168,255,.55)'; ctx.fillRect(38 + i * cw, 499 + 12 * (1 - fill), cw - 1, 12 * fill); }
   }
-  text(Math.floor(g.mana) + '/' + g.manaMax, 186, 523, 12, '#bfe0ff', 'right', 3);
-  if (g.mana >= g.manaMax) text('자원 최대!', 70, 523, 10, '#ffd45c', 'center', 3);
-  const u = UI.ult, ready = g.ult >= 100 && g.hero && g.hero.alive;
+  text(Math.floor(P.mana) + '/' + P.manaMax, 186, 523, 12, '#bfe0ff', 'right', 3);
+  if (P.mana >= P.manaMax) text('자원 최대!', 70, 523, 10, '#ffd45c', 'center', 3);
+  const u = UI.ult, ready = P.ult >= 100 && P.hero && P.hero.alive;
   ctx.save();
   ctx.beginPath(); ctx.arc(u.x, u.y, u.r, 0, 6.28); ctx.fillStyle = '#2a2458'; ctx.fill();
   ctx.beginPath(); ctx.arc(u.x, u.y, u.r - 2, 0, 6.28); ctx.clip();
-  ctx.drawImage(sprite('hero_' + g.cmdKey, 0), u.x - 34, u.y - 36, 68, 68);
-  if (!g.hero || !g.hero.alive) { ctx.fillStyle = 'rgba(0,0,0,.65)'; ctx.fillRect(u.x - 40, u.y - 40, 80, 80); }
+  ctx.drawImage(sprite('hero_' + P.cmdKey, 0), u.x - 34, u.y - 36, 68, 68);
+  if (!P.hero || !P.hero.alive) { ctx.fillStyle = 'rgba(0,0,0,.65)'; ctx.fillRect(u.x - 40, u.y - 40, 80, 80); }
   ctx.restore();
   ctx.lineWidth = 5; ctx.strokeStyle = 'rgba(0,0,0,.6)'; ctx.beginPath(); ctx.arc(u.x, u.y, u.r, 0, 6.28); ctx.stroke();
-  ctx.strokeStyle = ready ? '#ffd45c' : '#8a7aff'; ctx.beginPath(); ctx.arc(u.x, u.y, u.r, -Math.PI / 2, -Math.PI / 2 + 6.283 * g.ult / 100); ctx.stroke();
+  ctx.strokeStyle = ready ? '#ffd45c' : '#8a7aff'; ctx.beginPath(); ctx.arc(u.x, u.y, u.r, -Math.PI / 2, -Math.PI / 2 + 6.283 * P.ult / 100); ctx.stroke();
   if (ready) { ctx.save(); ctx.globalCompositeOperation = 'lighter'; glow(ctx, u.x, u.y, u.r + 10 + Math.sin(t * 6) * 3, 'rgba(255,212,92,.35)'); ctx.restore(); text('궁극기!', u.x, u.y + u.r - 2, 11, '#ffd45c', 'center', 3); }
-  else if (!g.hero || !g.hero.alive) text(Math.ceil(Math.max(0, g.heroRespawn)) + '초', u.x, u.y, 14, '#fff');
+  else if (!P.hero || !P.hero.alive) text(Math.ceil(Math.max(0, P.heroRespawn)) + '초', u.x, u.y, 14, '#fff');
   DECK.forEach((k, i) => {
-    const c = UI.card(i), d = UNITS[k], can = g.mana >= d.cost && g.cardCd[i] <= 0;
+    const c = UI.card(i), d = UNITS[k], can = P.mana >= d.cost && P.cardCd[i] <= 0;
     const hx = (x, y, w, h) => { ctx.beginPath(); ctx.moveTo(x + w / 2, y); ctx.lineTo(x + w, y + h * .2); ctx.lineTo(x + w, y + h * .8); ctx.lineTo(x + w / 2, y + h); ctx.lineTo(x, y + h * .8); ctx.lineTo(x, y + h * .2); ctx.closePath(); };
     const lift = drag && drag.slot === i ? -6 : 0;
     ctx.save(); ctx.translate(0, lift);
     hx(c.x, c.y, c.w, c.h);
     const cg = ctx.createLinearGradient(0, c.y, 0, c.y + c.h), col = CARD_COL[k];
     cg.addColorStop(0, col[0]); cg.addColorStop(1, col[1]); ctx.fillStyle = cg; ctx.fill();
-    const evo = g.lv.units[k] >= EVO_LV;
+    const evo = P.lv.units[k] >= EVO_LV;
     ctx.lineWidth = 2.5; ctx.strokeStyle = !can ? '#4a4470' : evo ? '#ffd45c' : '#e8e0ff'; ctx.stroke();
     ctx.clip();
     ctx.drawImage(sprite(k, 0), c.x - 6, c.y + 2, 76, 76);
     if (!can) { ctx.fillStyle = 'rgba(10,8,24,.55)'; ctx.fillRect(c.x, c.y, c.w, c.h); }
     ctx.restore();
-    ctx.beginPath(); ctx.arc(c.x + 10, c.y + 12 + lift, 10, 0, 6.28); ctx.fillStyle = g.mana >= d.cost ? '#3d8bff' : '#3a3a5a'; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = OUT; ctx.stroke();
+    ctx.beginPath(); ctx.arc(c.x + 10, c.y + 12 + lift, 10, 0, 6.28); ctx.fillStyle = P.mana >= d.cost ? '#3d8bff' : '#3a3a5a'; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = OUT; ctx.stroke();
     text(String(d.cost), c.x + 10, c.y + 12.5 + lift, 12, '#fff', 'center', 2);
-    text((evo ? '★' : '') + 'Lv' + g.lv.units[k], c.x + c.w / 2, c.y + c.h - 9 + lift, 10, evo ? '#ffd45c' : '#bfe9ff', 'center', 3);
+    text((evo ? '★' : '') + 'Lv' + P.lv.units[k], c.x + c.w / 2, c.y + c.h - 9 + lift, 10, evo ? '#ffd45c' : '#bfe9ff', 'center', 3);
     if (d.count > 1) text('×' + d.count, c.x + c.w - 9, c.y + 14 + lift, 10, '#fff', 'center', 3);
   });
   const a = UI.auto;
-  R(ctx, a.x, a.y, a.w, a.h, 10, g.auto ? '#ffb21f' : '#2a2458', 2);
-  text('AUTO', a.x + a.w / 2, a.y + a.h / 2, 12, g.auto ? '#2b1600' : '#bbb', 'center', g.auto ? 0 : 2);
+  R(ctx, a.x, a.y, a.w, a.h, 10, P.auto ? '#ffb21f' : '#2a2458', 2);
+  text('AUTO', a.x + a.w / 2, a.y + a.h / 2, 12, P.auto ? '#2b1600' : '#bbb', 'center', P.auto ? 0 : 2);
   const left = Math.max(0, TIME_LIMIT - g.time), mm = Math.floor(left / 60), ss = Math.floor(left % 60);
   E(ctx, 764, 496, 10, 10, '#ffd45c', 2); L(ctx, 764, 496, 764, 490, OUT, .8); L(ctx, 764, 496, 768, 498, OUT, .8);
   text(String(mm).padStart(2, '0') + ':' + String(ss).padStart(2, '0'), 805, 497, 17, left < 60 ? '#ff7b7b' : '#fff', 'center', 3);
-  const sp = UI.speed; R(ctx, sp.x, sp.y, sp.w, sp.h, 10, '#2a2458', 2); text('▶', sp.x + sp.w / 2, sp.y + 17, 14, '#fff', 'center', 0); text('x' + speedMul, sp.x + sp.w / 2, sp.y + 34, 10, '#ffd45c', 'center', 2);
+  const sp = UI.speed; ctx.globalAlpha = NETMODE ? .35 : 1; R(ctx, sp.x, sp.y, sp.w, sp.h, 10, '#2a2458', 2); text('▶', sp.x + sp.w / 2, sp.y + 17, 14, '#fff', 'center', 0); text('x' + (NETMODE ? 1 : speedMul), sp.x + sp.w / 2, sp.y + 34, 10, '#ffd45c', 'center', 2); ctx.globalAlpha = 1;
   const pp = UI.pause; R(ctx, pp.x, pp.y, pp.w, pp.h, 10, '#2a2458', 2); ctx.fillStyle = '#fff'; ctx.fillRect(pp.x + 15, pp.y + 13, 5, 18); ctx.fillRect(pp.x + 24, pp.y + 13, 5, 18);
   const w = Math.min(g.waveIdx, WAVES);
   ctx.fillStyle = 'rgba(15,10,35,.6)'; ctx.beginPath(); ctx.roundRect(W / 2 - 120, 6, 240, 44, 12); ctx.fill();
@@ -1295,9 +1338,25 @@ function drawHUD(t) {
   const s1 = '[일반]', s2 = ' ' + g.stage + ' 스테이지', tw = ctx.measureText(s1 + s2).width;
   text(s1, W / 2 - tw / 2, 21, 17, '#ffd45c', 'left', 3); text(s2, W / 2 - tw / 2 + ctx.measureText(s1).width, 21, 17, '#fff', 'left', 3);
   text('[웨이브 ' + w + '/' + WAVES + ']', W / 2, 40, 12, '#d0c8ff', 'center', 3);
-  text(CMDS[g.cmdKey].name + ' Lv' + g.lv.cmd, 14, 18, 12, '#ffd45c', 'left', 3);
-  if (g.invuln > 0) text('무적 ' + g.invuln.toFixed(1) + '초', 14, 36, 12, '#ffe68a', 'left', 3);
-  else text(CHAPTERS[g.ch].name, 14, 36, 11, '#d0c8ff', 'left', 3);
+  if (g.n > 1) {
+    // 협동: 팀원 목록 (색 = 병력 테두리 색)
+    g.P.forEach((q, i) => {
+      const y = 14 + i * 17;
+      ctx.fillStyle = OWN_COL[i]; ctx.beginPath(); ctx.arc(18, y, 5, 0, 6.28); ctx.fill();
+      text((i === ME ? '▶' : '') + q.nm.slice(0, 6), 28, y, 11, i === ME ? '#fff' : '#d8d0ff', 'left', 3);
+      const hr = q.hero && q.hero.alive ? q.hero.hp / q.hero.maxhp : 0;
+      bar(104, y - 3, 40, 5, hr, hr ? '#ffd45c' : '#555');
+      text(CMDS[q.cmdKey].role, 162, y, 10, '#c9bfff', 'center', 3);
+      if (q.left) text('자동', 182, y, 10, '#ff9a9a', 'left', 3); else if (q.auto) text('AUTO', 182, y, 10, '#ffd45c', 'left', 3);
+    });
+    const ly = 16 + g.n * 17;
+    if (g.aura.trinity) text('삼위일체 +5%', 14, ly, 11, '#ffe68a', 'left', 3);
+    if (g.invuln > 0) text('무적 ' + g.invuln.toFixed(1) + '초', g.aura.trinity ? 104 : 14, ly, 11, '#ffe68a', 'left', 3);
+  } else {
+    text(CMDS[P.cmdKey].name + ' Lv' + P.lv.cmd, 14, 18, 12, '#ffd45c', 'left', 3);
+    if (g.invuln > 0) text('무적 ' + g.invuln.toFixed(1) + '초', 14, 36, 12, '#ffe68a', 'left', 3);
+    else text(CHAPTERS[g.ch].name, 14, 36, 11, '#d0c8ff', 'left', 3);
+  }
   const op = g.structs.filter(s => s.kind === 'outpost' && s.team === 0).length;
   text('거점 점령 ' + op + '/2', W - 14, 18, 12, op === 2 ? '#8fd0ff' : '#fff', 'right', 3);
   text(coreShielded(g) ? '핵심 성: 보호막' : '핵심 성: 공격 가능!', W - 14, 36, 12, coreShielded(g) ? '#c9a5ff' : '#ffd45c', 'right', 3);
@@ -1321,59 +1380,101 @@ function drawBanners(dt) {
 /* ================= 메인 루프 ================= */
 let state = 'lobby', last = 0, acc = 0, paused = false;
 const perf = { sim: 0, n: 0 };
+// 멀티: 확정된 입력 묶음(턴)
+let netTurns = new Set(), netMaxTurn = -1, netStartAt = 0, netDesync = false;
+
+function queueInput(inp) {
+  if (!G || G.over) return;
+  inp.p = ME;
+  if (NETMODE) { window.RFNet.send(inp); return; }
+  inp.t = G.tick + 1; G.inputs.push(inp);
+}
+function onNetTurn(k, list) {
+  if (!G || netTurns.has(k)) return;
+  netTurns.add(k); if (k > netMaxTurn) netMaxTurn = k;
+  for (const i of list) G.inputs.push(Object.assign({}, i, { t: k * TURN }));
+}
+
 function loop(ts) {
   requestAnimationFrame(loop);
   const now = ts / 1000, dt = Math.min(.05, now - (last || now)); last = now;
   sfxCount = 0;
   if (state !== 'play' || !G || !app) return;
-  if (!paused) {
+  let rdt = 0;
+  if (NETMODE) {
+    const wait = netStartAt - window.RFNet.now();
+    if (wait <= 0) {
+      if (!G.over || G.overT < 3) window.RFNet.pump(G.tick, netMaxTurn);
+      acc += Math.min(.25, now - (G.lastNow || now)); G.lastNow = now;   // 느린 기기도 실제 시간 기준으로 진행
+      let n = 0;
+      const t0 = performance.now();
+      // 확정된 턴이 있을 때만 진행. 너무 뒤처졌으면 빠르게 따라잡는다.
+      while (n < 8 && netTurns.has((G.tick / TURN) | 0)) {
+        const ahead = (netMaxTurn + 1) * TURN - G.tick;
+        if (acc >= TICK) acc -= TICK; else if (ahead <= TURN * (LAG + 2)) break;
+        step(G); n++;
+        if (G.tick % 100 === 0) window.RFNet.hash(G.tick, stateHash(G));
+      }
+      if (n) { perf.sim += (performance.now() - t0) / n; perf.n++; }
+      if (acc > TICK * 3) acc = TICK * 3;
+      rdt = dt;
+    } else { G.countdown = Math.ceil(wait / 1000); }
+  } else if (!paused) {
     acc += dt * speedMul * (G.over ? .35 : 1);
     let n = 0;
     const t0 = performance.now();
     while (acc >= TICK && n < 8) { step(G); acc -= TICK; n++; }
     if (n) { perf.sim += (performance.now() - t0) / n; perf.n++; }
+    rdt = dt * speedMul;
   }
-  const rdt = paused ? 0 : dt * speedMul;
   renderWorld(rdt, now);
   app.renderer.render(app.stage);
   drawOverlay(rdt, now);
+  if (NETMODE && netStartAt - window.RFNet.now() > 0) {
+    ctx.fillStyle = 'rgba(10,6,24,.45)'; ctx.fillRect(0, 0, W, H);
+    text('곧 시작해요', W / 2, H / 2 - 50, 20, '#d0c8ff', 'center', 4);
+    text(String(G.countdown || ''), W / 2, H / 2, 64, '#ffd45c', 'center', 6);
+  }
+  if (netDesync) text('⚠ 동기화 오류가 감지됐어요', W / 2, 62, 12, '#ff9a9a', 'center', 3);
 }
 
 /* ================= 입력 (탭 = 기지 앞 소환, 끌어놓기 = 원하는 위치 소환) ================= */
 function toLogical(e) { const r = hud.getBoundingClientRect(); return { x: (e.clientX - r.left) / r.width * W, y: (e.clientY - r.top) / r.height * H }; }
 const inR = (p, b) => p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h;
+const myP = () => G && G.P[ME];
 hud.addEventListener('pointerdown', e => {
   if (state !== 'play' || !G || paused) return;
   initAudio();
   const p = toLogical(e);
+  if (inR(p, UI.pause)) { pauseGame(); return; }
+  if (NETMODE && netStartAt > window.RFNet.now()) return;
   for (let i = 0; i < 6; i++) if (inR(p, UI.card(i))) {
     drag = { slot: i, x: p.x, y: p.y, sx: p.x, sy: p.y, moved: false, id: e.pointerId };
     try { hud.setPointerCapture(e.pointerId); } catch (er) {}
     return;
   }
-  if (Math.hypot(p.x - UI.ult.x, p.y - UI.ult.y) < UI.ult.r + 4) { if (G.ult >= 100) { queueInput({ type: 'ult' }); if (navigator.vibrate) navigator.vibrate([20, 30, 40]); } return; }
+  if (hyp(p.x - UI.ult.x, p.y - UI.ult.y) < UI.ult.r + 4) { if (myP().ult >= 100) { queueInput({ type: 'ult' }); if (navigator.vibrate) navigator.vibrate([20, 30, 40]); } return; }
   if (inR(p, UI.auto)) { queueInput({ type: 'auto' }); return; }
-  if (inR(p, UI.speed)) { speedMul = speedMul === 1 ? 2 : 1; return; }
-  if (inR(p, UI.pause)) { pauseGame(); return; }
+  if (inR(p, UI.speed) && !NETMODE) { speedMul = speedMul === 1 ? 2 : 1; return; }
 });
 hud.addEventListener('pointermove', e => {
   if (!drag || e.pointerId !== drag.id) return;
   const p = toLogical(e); drag.x = p.x; drag.y = p.y;
-  if (Math.hypot(p.x - drag.sx, p.y - drag.sy) > 14) drag.moved = true;
+  if (hyp(p.x - drag.sx, p.y - drag.sy) > 14) drag.moved = true;
 });
 function endDrag(e, cancel) {
   if (!drag || (e && e.pointerId !== drag.id)) return;
   const d = drag; drag = null;
   if (cancel || !G) return;
   const card = UNITS[DECK[d.slot]];
-  if (G.mana < card.cost) { floatTxt(UI.card(d.slot).x + 32, 452, '자원 부족', '#ff9a9a'); return; }
+  if (myP().mana < card.cost) { floatTxt(UI.card(d.slot).x + 32, 452, '자원 부족', '#ff9a9a'); return; }
   if (!d.moved) { queueInput({ type: 'card', slot: d.slot }); if (navigator.vibrate) navigator.vibrate(12); return; }
   if (d.x <= deployMax(G) && d.y >= FT - 30 && d.y <= FB + 20) { queueInput({ type: 'card', slot: d.slot, x: Math.round(d.x), y: Math.round(d.y) }); if (navigator.vibrate) navigator.vibrate(15); }
 }
 hud.addEventListener('pointerup', e => endDrag(e));
 hud.addEventListener('pointercancel', e => endDrag(e, true));
 window.addEventListener('keydown', e => {
-  if (state !== 'play' || !G) return;
+  if (state !== 'play' || !G || e.target.tagName === 'INPUT') return;
   const n = parseInt(e.key, 10);
   if (n >= 1 && n <= 6) queueInput({ type: 'card', slot: n - 1 });
   else if (e.key === 'q' || e.key === ' ') queueInput({ type: 'ult' });
@@ -1384,12 +1485,13 @@ window.addEventListener('keydown', e => {
 /* ================= 화면 전환 / 로비 ================= */
 const $ = id => document.getElementById(id);
 function show(id, on) { $(id).classList.toggle('on', on); }
-function pauseGame() { if (state !== 'play' || !G || G.over) return; paused = true; drag = null; show('pause', true); }
+// 멀티에서는 게임을 멈출 수 없으므로 메뉴만 연다
+function pauseGame() { if (state !== 'play' || !G || G.over) return; if (!NETMODE) paused = true; drag = null; $('pauseTitle').textContent = NETMODE ? '메뉴' : '일시정지'; $('toLobby').textContent = NETMODE ? '방 나가기' : '로비로'; show('pause', true); }
 function resumeGame() { paused = false; last = 0; show('pause', false); }
 $('resume').onclick = resumeGame;
-$('toLobby').onclick = () => { paused = false; show('pause', false); toLobby(); };
-$('resLobby').onclick = () => { show('result', false); toLobby(); };
-$('resRetry').onclick = () => { show('result', false); startGame(); };
+$('toLobby').onclick = () => { paused = false; show('pause', false); if (NETMODE) leaveCoop(); else toLobby(); };
+$('resLobby').onclick = () => { show('result', false); if (NETMODE) leaveCoop(); else toLobby(); };
+$('resRetry').onclick = () => { show('result', false); if (NETMODE) backToRoom(); else startGame(); };
 $('talClose').onclick = () => { show('talent', false); buildLobby(); };
 
 function miniCanvas(type, size) { const c = document.createElement('canvas'); c.width = c.height = size; c.getContext('2d').drawImage(sprite(type, 0), 0, 0, size, size); return c; }
@@ -1437,7 +1539,7 @@ function openTalents(k) {
   });
   show('talent', true);
 }
-function toLobby() { state = 'lobby'; G = null; drag = null; buildLobby(); show('lobby', true); }
+function toLobby() { state = 'lobby'; G = null; NETMODE = false; ME = 0; drag = null; buildLobby(); show('lobby', true); }
 
 async function goFullscreen() {
   try {
@@ -1446,47 +1548,152 @@ async function goFullscreen() {
     if (screen.orientation && screen.orientation.lock) await screen.orientation.lock('landscape');
   } catch (e) {}
 }
+function beginPlay(g) {
+  parts = []; texts = []; banners = []; rings = []; bolts = []; corpses = [];
+  G = g; setupWorld(G);
+  state = 'play'; paused = false; acc = 0; last = 0; drag = null;
+  for (const id of ['lobby', 'coop', 'result', 'pause']) show(id, false);
+  banner(CHAPTERS[G.ch].name + ' · ' + G.stage + ' 스테이지', '#ffd45c');
+  setTimeout(() => G === g && banner(g.n > 1 ? '함께 거점을 점령하고 핵심 성을 무너뜨려라!' : '거점 2곳을 점령하고 핵심 성을 무너뜨려라!', '#fff'), 1200);
+  if (save.tipDrag < 3) { save.tipDrag++; writeSave(); setTimeout(() => G === g && banner('카드를 끌어서 원하는 곳에 소환할 수 있어요', '#9fdcff'), 2600); }
+}
 function startGame() {
   if (!app) return;
   initAudio();
-  parts = []; texts = []; banners = []; rings = []; bolts = []; corpses = [];
-  G = newGame(save.stage, save.cmd, (Date.now() & 0x7fffffff));
-  setupWorld(G);
-  state = 'play'; paused = false; acc = 0; last = 0; drag = null;
-  show('lobby', false);
-  banner(CHAPTERS[G.ch].name + ' · ' + save.stage + ' 스테이지', '#ffd45c');
-  setTimeout(() => G && banner('거점 2곳을 점령하고 핵심 성을 무너뜨려라!', '#fff'), 1200);
-  if (save.tipDrag < 3) { save.tipDrag++; writeSave(); setTimeout(() => G && banner('카드를 끌어서 원하는 곳에 소환할 수 있어요', '#9fdcff'), 2600); }
+  NETMODE = false; ME = 0;
+  beginPlay(newGame(save.stage, soloRoster(), (Date.now() & 0x7fffffff)));
 }
 $('startBtn').onclick = () => { goFullscreen(); startGame(); };
 
 function showResult(g) {
   if (G !== g) return;
-  const win = g.over === 'win';
+  const win = g.over === 'win', P = g.P[ME];
   const stars = win ? 1 + (g.base.hp / g.base.maxhp >= .6 ? 1 : 0) + (g.time <= STAR_TIME ? 1 : 0) : 0;
   $('resTitle').textContent = win ? '승리!' : g.over === 'time' ? '시간 초과' : '패배';
   $('resTitle').className = win ? 'win' : 'lose';
   $('resStars').innerHTML = win ? `<span class="${stars >= 1 ? 'on' : ''}">★</span><span class="${stars >= 2 ? 'on' : ''}">★</span><span class="${stars >= 3 ? 'on' : ''}">★</span>` : '';
-  $('resStat').innerHTML = `처치 ${g.stats.enemyKills} · 거점 ${g.stats.captured}/2 · ${Math.floor(g.time / 60)}분 ${Math.floor(g.time % 60)}초` + (win ? `<br><small>★ 승리 · ★ 기지 체력 60% 이상 · ★ 4분 안에 승리</small>` : '');
+  let st = `처치 ${g.stats.enemyKills} · 거점 ${g.stats.captured}/2 · ${Math.floor(g.time / 60)}분 ${Math.floor(g.time % 60)}초`;
+  if (g.n > 1) st += '<br><small>' + g.P.map(q => `${esc(q.nm)} 처치 ${Object.values(q.stats.kills).reduce((a, b) => a + b, 0) + q.stats.cmdKills}`).join(' · ') + '</small>';
+  else if (win) st += `<br><small>★ 승리 · ★ 기지 체력 60% 이상 · ★ 4분 안에 승리</small>`;
+  $('resStat').innerHTML = st;
   if (win && g.stage > save.cleared) save.cleared = g.stage;
   if (win) save.stars[g.stage] = Math.max(save.stars[g.stage] || 0, stars);
-  if (win && save.stage < 10) save.stage = Math.min(10, g.stage + 1);
-  const bonus = 1 + stars * .1;
+  if (win && g.n === 1 && save.stage < 10) save.stage = Math.min(10, g.stage + 1);
+  const bonus = (1 + stars * .1) * (g.n > 1 ? 1.2 : 1);       // 협동 보너스 20%
   const rows = [];
-  const cx = Math.round((30 + g.stats.cmdKills * 3 + (win ? 80 : 20) + g.stage * 6 + (g.stats.bossKilled ? 30 : 0)) * bonus);
-  const co = save.cmds[g.cmdKey], before = co.lvl, cu = addXp(co, cx);
-  const newTal = TALENTS[g.cmdKey].some(r => before < r.lv && co.lvl >= r.lv);
-  rows.push({ name: CMDS[g.cmdKey].name, o: co, xp: cx, up: cu, note: newTal ? '새 특성 열림!' : '' });
+  const cx = Math.round((30 + P.stats.cmdKills * 3 + (win ? 80 : 20) + g.stage * 6 + (g.stats.bossKilled ? 30 : 0)) * bonus);
+  const co = save.cmds[P.cmdKey], before = co.lvl, cu = addXp(co, cx);
+  const newTal = TALENTS[P.cmdKey].some(r => before < r.lv && co.lvl >= r.lv);
+  rows.push({ name: CMDS[P.cmdKey].name, o: co, xp: cx, up: cu, note: newTal ? '새 특성 열림!' : '' });
   DECK.forEach(k => {
-    const dep = g.stats.deploys[k] || 0, kl = g.stats.kills[k] || 0;
+    const dep = P.stats.deploys[k] || 0, kl = P.stats.kills[k] || 0;
     const x = Math.round((dep * 4 + kl * 3 + (dep ? (win ? 25 : 8) : 0) + g.stage * (dep ? 2 : 0)) * bonus);
     const o = save.units[k], b0 = o.lvl, up = x ? addXp(o, x) : 0;
     rows.push({ name: UNITS[k].name, o, xp: x, up, note: b0 < EVO_LV && o.lvl >= EVO_LV ? '진화!' : '' });
   });
   writeSave();
   $('resXp').innerHTML = rows.map(r => `<div class="xpi"><b>${r.name} <span style="color:#9fe7ff">Lv ${r.o.lvl}</span></b><span>경험치 +${r.xp}</span>${r.up ? `<span class="up">레벨 업! ▲${r.up}</span>` : ''}${r.note ? `<span class="up" style="color:#ffd45c">${r.note}</span>` : ''}<div class="xb"><i style="width:${r.o.lvl >= MAXLV ? 100 : r.o.xp / xpNeed(r.o.lvl) * 100}%"></i></div></div>`).join('');
+  $('resLobby').textContent = g.n > 1 ? '나가기' : '로비로';
+  $('resRetry').textContent = g.n > 1 ? '방으로' : '다시 하기';
   show('result', true);
 }
+
+/* ================= 협동 레이드 (대기실) ================= */
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const CMD_KEYS = Object.keys(CMDS);
+let coopBusy = false;
+function coopMsg(t, err) { const m = $('cpMsg'); m.textContent = t || ''; m.style.color = err ? '#ff9a9a' : '#bfe0ff'; }
+function coopScreen(which) { $('cpEntry').style.display = which === 'entry' ? '' : 'none'; $('cpRoom').style.display = which === 'room' ? '' : 'none'; }
+async function openCoop() {
+  if (!app) return;
+  show('coop', true); coopScreen('entry'); coopMsg('서버에 연결하는 중…');
+  try { await window.RFNet.init(); coopMsg(''); $('cpNick').textContent = window.RFNet.nick; }
+  catch (e) { console.error(e); coopMsg('서버에 연결하지 못했어요. 잠시 후 다시 시도해 주세요.', true); }
+}
+async function coopDo(fn) {
+  if (coopBusy) return; coopBusy = true;
+  try { await fn(); } catch (e) { console.warn(e); coopMsg(e.message || '문제가 생겼어요', true); }
+  coopBusy = false;
+}
+const myProfile = () => profileOf(save.cmd);
+$('coopBtn').onclick = () => { goFullscreen(); openCoop(); };
+$('cpBack').onclick = () => { if (window.RFNet.code) window.RFNet.leave(); show('coop', false); buildLobby(); };
+$('cpReroll').onclick = () => { $('cpNick').textContent = window.RFNet.rerollNick(); };
+$('cpCreate').onclick = () => coopDo(async () => { coopMsg('방을 만드는 중…'); await window.RFNet.create(myProfile(), Math.min(save.stage, save.cleared + 1)); coopScreen('room'); coopMsg(''); renderRoom(); });
+$('cpQuick').onclick = () => coopDo(async () => { coopMsg('함께할 방을 찾는 중…'); await window.RFNet.quick(myProfile(), Math.min(save.stage, save.cleared + 1)); coopScreen('room'); coopMsg(''); renderRoom(); });
+$('cpJoin').onclick = () => coopDo(async () => {
+  const c = $('cpCode').value.replace(/\D/g, '');
+  if (c.length !== 4) throw new Error('방 번호 4자리를 입력해 주세요');
+  coopMsg('들어가는 중…'); await window.RFNet.join(c, myProfile()); coopScreen('room'); coopMsg(''); renderRoom();
+});
+$('cpLeave').onclick = () => { window.RFNet.leave(); coopScreen('entry'); coopMsg('방에서 나왔어요'); };
+$('cpCmd').onclick = () => {
+  save.cmd = CMD_KEYS[(CMD_KEYS.indexOf(save.cmd) + 1) % CMD_KEYS.length]; writeSave();
+  window.RFNet.setProfile(myProfile());
+};
+$('cpStPrev').onclick = () => { const r = window.RFNet.room; if (r.meta && r.meta.stage > 1) window.RFNet.setStage(r.meta.stage - 1); };
+$('cpStNext').onclick = () => { const r = window.RFNet.room; if (r.meta && r.meta.stage < Math.min(10, save.cleared + 1)) window.RFNet.setStage(r.meta.stage + 1); };
+$('cpGo').onclick = () => {
+  const N = window.RFNet;
+  if (N.isHost()) { const ps = Object.values(N.room.players || {}); if (ps.length >= 2 && ps.every(p => p.rd || p === N.room.players[N.uid])) N.start(); }
+  else { const me = (N.room.players || {})[N.uid]; N.setReady(!(me && me.rd)); }
+};
+function renderRoom() {
+  const N = window.RFNet, r = N.room;
+  if (!N.code || !r.meta) return;
+  if (state === 'play' && !(G && G.over)) return;
+  $('cpRoomCode').textContent = N.code;
+  const ps = Object.entries(r.players || {}).sort((a, b) => (a[1].j || 0) - (b[1].j || 0));
+  const host = r.meta.host;
+  let html = '';
+  for (let i = 0; i < 4; i++) {
+    const e = ps[i];
+    if (!e) { html += `<div class="slot empty"><span>빈자리</span><small>방 번호를 알려주세요</small></div>`; continue; }
+    const [u, p] = e, c = CMDS[p.cmd] || CMDS.guardian;
+    html += `<div class="slot${u === N.uid ? ' me' : ''}" style="border-color:${OWN_COL[i]}"><canvas data-cmd="${p.cmd}" width="96" height="96"></canvas><b>${esc(p.nm)}${u === N.uid ? ' (나)' : ''}</b><span>${c.name} · <i class="rl">${c.role}</i> · Lv ${p.lv ? p.lv.cmd : 1}</span><em class="${u === host ? 'host' : p.rd ? 'rd' : ''}">${u === host ? '방장' : p.rd ? '준비 완료' : '준비 중'}</em></div>`;
+  }
+  $('cpSlots').innerHTML = html;
+  $('cpSlots').querySelectorAll('canvas').forEach(cv => cv.getContext('2d').drawImage(sprite('hero_' + cv.dataset.cmd, 0), 0, 0, 96, 96));
+  const roles = new Set(ps.map(e => e[1].cmd));
+  $('cpSyn').innerHTML = CMD_KEYS.map(k => `<span class="${roles.has(k) ? 'on' : ''}">${CMDS[k].role}</span>`).join('') + (roles.size === 3 ? '<b>삼위일체! 전원 +5%</b>' : '<small>수호·파괴·지원이 모이면 삼위일체 보너스</small>');
+  const S = STAGES[r.meta.stage] || STAGES[1];
+  $('cpStage').textContent = r.meta.stage + ' 스테이지';
+  $('cpStInfo').textContent = CHAPTERS[S.ch].name + ' · 수문장 ' + ENEMIES[S.boss].name + (ps.length > 1 ? ` · 적 강화 ×${(1 + .55 * (ps.length - 1)).toFixed(2)}` : '');
+  const isHost = N.isHost();
+  $('cpStPrev').style.visibility = $('cpStNext').style.visibility = isHost ? 'visible' : 'hidden';
+  const me = (r.players || {})[N.uid];
+  if (isHost) {
+    const ready = ps.length >= 2 && ps.every(([u, p]) => u === host || p.rd);
+    $('cpGo').textContent = ps.length < 2 ? '함께할 사람을 기다리는 중' : ready ? '시작!' : '모두 준비하면 시작';
+    $('cpGo').disabled = !ready;
+  } else { $('cpGo').disabled = false; $('cpGo').textContent = me && me.rd ? '준비 취소' : '준비'; }
+}
+function startOnline(cfg) {
+  if (!app) return;
+  initAudio();
+  ME = cfg.me; NETMODE = true;
+  netTurns = new Set(); netMaxTurn = -1; netStartAt = cfg.startAt; netDesync = false;
+  const g = newGame(cfg.stage, cfg.roster, cfg.seed);
+  beginPlay(g);
+}
+function backToRoom() {
+  const N = window.RFNet;
+  state = 'lobby'; G = null; NETMODE = false; ME = 0;
+  if (!N.code) { toLobby(); return; }
+  if (N.isHost()) N.backToRoom();
+  show('lobby', false); show('coop', true); coopScreen('room'); renderRoom();
+}
+function leaveCoop() {
+  window.RFNet.leave();
+  toLobby();
+}
+window.RFNet && window.RFNet.hooks({
+  onRoom: renderRoom,
+  onStart: startOnline,
+  onTurn: onNetTurn,
+  onDesync: () => { netDesync = true; },
+  onGone: msg => { if (state === 'play' && NETMODE) return; coopScreen('entry'); coopMsg(msg, true); },
+});
 
 /* ================= 화면 크기 / 방향 ================= */
 function resize() {
@@ -1508,6 +1715,6 @@ $('startBtn').disabled = true; $('startBtn').textContent = '불러오는 중…'
 initPixi().then(() => { $('startBtn').disabled = false; $('startBtn').textContent = '출전!'; buildLobby(); })
   .catch(e => { console.error(e); $('startBtn').textContent = '그래픽 엔진을 불러오지 못했어요 (새로고침)'; });
 
-// 테스트·디버그용 (멀티 확장 시 락스텝 검증에도 사용)
-window.__RF = { newGame, step, get G() { return G; }, startGame, save, UNITS, DECK, NOFX, perf, get renderer() { return RENDERER; }, get app() { return app; }, STAGES };
+// 테스트·디버그용 (락스텝 검증에도 사용)
+window.__RF = { newGame, step, stateHash, soloRoster, get G() { return G; }, get ME() { return ME; }, startGame, save, UNITS, DECK, NOFX, perf, get renderer() { return RENDERER; }, get app() { return app; }, STAGES, get netMaxTurn() { return netMaxTurn; } };
 })();
