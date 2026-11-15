@@ -81,13 +81,13 @@ async function connect() {
   BS.mode = 'online';
   resetLocal();
   db.ref('.info/serverTimeOffset').on('value', s => { offset = s.val() || 0; });
-  const pRef = db.ref('presence/' + uid);
+  const pRef = db.ref('brain/presence/' + uid);
   db.ref('.info/connected').on('value', s => {
     connected = !!s.val();
     if (connected) { pRef.onDisconnect().remove(); pRef.set({ nick, t: firebase.database.ServerValue.TIMESTAMP, ready: false }); }
   });
-  db.ref('presence').on('value', s => { presence = s.val() || {}; renderLobby(); });
-  db.ref('show').on('value', s => { show = s.val(); onShow(); });
+  db.ref('brain/presence').on('value', s => { presence = s.val() || {}; renderLobby(); });
+  db.ref('brain/show').on('value', s => { show = s.val(); onShow(); });
   hostT = setInterval(hostTick, 250);
   uiT = setInterval(uiTick, 80);
   showLobby(true);
@@ -97,9 +97,9 @@ function leave(silent) {
   clearInterval(hostT); clearInterval(uiT); hostT = uiT = null;
   if (db) {
     try {
-      if (show && show.lock && show.lock.uid === uid) db.ref('show/lock').remove();
-      if (uid) db.ref('presence/' + uid).remove();
-      ['.info/serverTimeOffset', '.info/connected', 'presence', 'show'].forEach(p => db.ref(p).off());
+      if (show && show.lock && show.lock.uid === uid) db.ref('brain/show/lock').remove();
+      if (uid) db.ref('brain/presence/' + uid).remove();
+      ['.info/serverTimeOffset', '.info/connected', 'brain/presence', 'brain/show'].forEach(p => db.ref(p).off());
       if (answersRef) answersRef.off();
       setTimeout(() => db && db.goOffline(), 300);
     } catch (e) {}
@@ -115,10 +115,10 @@ $('lobbyLeave').onclick = () => leave();
 $('lobbyReady').onclick = () => {
   if (!db || !uid || !presence[uid]) return;
   const r = !presence[uid].ready;
-  db.ref('presence/' + uid + '/ready').set(r);
+  db.ref('brain/presence/' + uid + '/ready').set(r);
   if (r) BS.SFX.click();
 };
-function clearReady() { if (db && uid && presence[uid] && presence[uid].ready) db.ref('presence/' + uid + '/ready').set(false); }
+function clearReady() { if (db && uid && presence[uid] && presence[uid].ready) db.ref('brain/presence/' + uid + '/ready').set(false); }
 $('onBarLeave').onclick = () => leave();
 $('finLeave').onclick = () => leave();
 $('lobbySolo').onclick = () => { leave(true); BS.mode = 'single'; $('startBtn').click(); };
@@ -132,20 +132,20 @@ function resetLocal() {
 const enc = (c, qn) => ((c + 3) * 17 + qn * 29) % 101;
 const dec = (z, qn) => { for (let c = 0; c < 4; c++) if (enc(c, qn) === z) return c; return 0; };
 const aliveSlots = s => (s.alive || []).map((a, i) => a ? i : -1).filter(i => i >= 0);
-function up(v) { return db.ref('show').update(v); }
+function up(v) { return db.ref('brain/show').update(v); }
 
 function hostTick() {
   if (!db || !connected || !uid) return;
   const t = now(), lock = show && show.lock;
   if (!lock || t - lock.hb > HB_STALE) {
-    db.ref('show/lock').transaction(cur => {
+    db.ref('brain/show/lock').transaction(cur => {
       if (!cur || cur.uid === uid || now() - cur.hb > HB_STALE) return { uid, hb: now() };
       return;
     });
     return;
   }
   if (lock.uid !== uid) return;
-  if (t - lock.hb > 2000) db.ref('show/lock/hb').set(t);
+  if (t - lock.hb > 2000) db.ref('brain/show/lock/hb').set(t);
   try { drive(t); } catch (e) { console.error(e); }
 }
 
@@ -190,7 +190,7 @@ function drive(t) {
     }
     case 'final':
       if (t >= s.until) {
-        db.ref('answers').remove();
+        db.ref('brain/answers').remove();
         up({ phase: humans.length >= 2 ? 'countdown' : 'lobby', until: humans.length >= 2 ? t + WAIT_MS : null,
           cast: null, alive: null, q: null, z: null, key: null, aiAns: null, ans: null, out: null, winners: null, correct: null, allWrong: null });
       }
@@ -290,7 +290,7 @@ function onShow() {
 function attachAnswers(key) {
   if (answersRef) answersRef.off();
   answersKey = key; answers = {};
-  answersRef = db.ref('answers/' + key);
+  answersRef = db.ref('brain/answers/' + key);
   answersRef.on('value', s => { answers = s.val() || {}; onAnswers(); });
 }
 function onAnswers() {
@@ -507,7 +507,7 @@ BS.onlinePick = i => {
   BS.setBoard(cs[mySlot], BS.label(s.q, i), 'lock', true);
   BS.SFX.click();
   BS.say(BS.pick(['좋아요, 답을 고르셨군요!', '과연 정답일까요?', '선택 완료! 두근두근…']));
-  db.ref(`answers/${s.key}/${uid}`).set(i).catch(() => {
+  db.ref(`brain/answers/${s.key}/${uid}`).set(i).catch(() => {
     BS.say('앗! 시간이 지나 답이 접수되지 않았어요.');
     ui.myAns = null;
   });
@@ -519,5 +519,5 @@ document.addEventListener('keydown', e => {
   if (show.q.ox) { if (k === 'o' || k === '1') BS.onlinePick(0); else if (k === 'x' || k === '2') BS.onlinePick(1); }
   else if (['1', '2', '3', '4'].includes(k)) BS.onlinePick(+k - 1);
 });
-window.addEventListener('pagehide', () => { if (BS.mode === 'online' && db && uid) { try { db.ref('presence/' + uid).remove(); } catch (e) {} } });
+window.addEventListener('pagehide', () => { if (BS.mode === 'online' && db && uid) { try { db.ref('brain/presence/' + uid).remove(); } catch (e) {} } });
 })();
