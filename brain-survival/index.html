@@ -117,6 +117,10 @@ button{font-family:inherit}
 /* 무대 */
 .stage{position:relative;z-index:2;padding:6px 12px 18px}
 .row{position:relative;display:grid;grid-template-columns:repeat(10,1fr);gap:4px;padding:0 6px 10px}
+.row.solo{grid-template-columns:repeat(8,1fr);gap:10px;padding:8px 20px 12px;margin-top:6px}
+.row.solo .ava{max-width:92px}
+.row.solo .board{max-width:64px;font-size:22px;margin-top:-24px}
+.row.solo .plate{font-size:12px;padding:2px 6px}
 .row.back{padding:0 34px 10px}
 .row.front{margin-top:4px}
 .row::after{content:'';position:absolute;left:0;right:0;bottom:0;height:30px;z-index:-1;border-radius:4px;
@@ -216,6 +220,9 @@ button{font-family:inherit}
   .bulbs span:nth-child(n+13){display:none}
   .stage{padding:4px 4px 14px}
   .row,.row.back{grid-template-columns:repeat(5,1fr);row-gap:14px;padding:0 4px 10px}
+  .row.solo{grid-template-columns:repeat(4,1fr);gap:8px;row-gap:16px;padding:6px 8px 10px}
+  .row.solo .ava{max-width:80px}
+  .row.solo .board{max-width:52px;font-size:19px}
   .row::after{display:none}
   .row.back::after{display:none}
   .ct{padding-bottom:4px}
@@ -274,7 +281,7 @@ button{font-family:inherit}
         ❌ 틀리거나 답을 못 고르면 <b>탈락!</b><br>
         🙌 단, <b>모두 틀리면 전원 생존</b>입니다.<br>
         🔁 탈락해도 <b>패자부활 찬스</b>가 한 번 있어요.<br>
-        🏆 20명 중 <b>마지막까지 살아남으면 우승!</b>
+        🏆 8명 중 <b>마지막까지 살아남으면 우승!</b>
       </div>
       <div class="best" id="bestTxt"></div>
       <button class="btn" id="startBtn">혼자 하기</button>
@@ -312,7 +319,7 @@ button{font-family:inherit}
       <div class="desc" id="lobbyMsg">연결 중…</div>
       <div class="cd" id="lobbyCd"></div>
       <div class="chips" id="lobbyList"></div>
-      <div class="hint">사람이 20명보다 적으면 빈자리는 AI 참가자가 채워요.</div>
+      <div class="hint">사람이 8명보다 적으면 빈자리는 AI 참가자가 채워요.</div>
       <button class="btn pink sm" id="lobbyReady">준비 완료!</button><br>
       <button class="btn sub sm" id="lobbySolo">혼자 하기로 바꾸기</button>
       <button class="btn sm" id="lobbyLeave">나가기</button>
