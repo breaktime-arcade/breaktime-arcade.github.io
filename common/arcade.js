@@ -9,9 +9,11 @@
  *  1) ⛶ 전체화면 버튼  (블로그 글 안에서도 크게 볼 수 있게)
  *  2) 🕹 더 많은 게임 버튼 (블로그로 이동)
  *  3) github.io 주소로 직접 들어온 방문자에게 "블로그에서 하기" 안내 띠
+ *  4) 다른 탭·앱으로 이동하면 게임 소리 자동 정지 (돌아오면 다시 재생)
  *
  * 옵션 (script 태그에 붙이기)
  *   data-fs="off"       게임에 이미 전체화면 버튼이 있으면 ⛶ 버튼을 숨김
+ *   data-ui="off"       버튼·안내 띠 없이 4) 소리 정지 기능만 사용
  *   data-pos="tr"       버튼 위치: tl(왼쪽 위, 기본) tr(오른쪽 위) bl(왼쪽 아래) br(오른쪽 아래) ml(왼쪽 가운데) mr(오른쪽 가운데)
  */
 (function () {
@@ -33,6 +35,65 @@
     'duck-capsule-combo': 'entry/duck-capsule-combo', 'hamster-balloon-ride': 'entry/hamster-balloon-ride',
     'cake-half': 'entry/cake-half', 'reaction': 'entry/reaction', 'one-second-ago': 'entry/one-second-ago'
   };
+
+  // 4) 백그라운드 소리 정지 ----------------------------------------------
+  //   게임 코드를 고치지 않아도, 탭이 가려지면 모든 Web Audio·오디오 태그·음성 안내를 멈춘다.
+  (function () {
+    var ctxs = [], held = [], medias = [], heldMedia = [], SUS = null, RES = null;
+    var AC = window.AudioContext || window.webkitAudioContext;
+    var proto = window.BaseAudioContext ? window.BaseAudioContext.prototype : (AC && AC.prototype);
+    var hidden = function () { return document.hidden || document.visibilityState === 'hidden'; };
+    var reg = function (c) { if (c && ctxs.indexOf(c) < 0) { ctxs.push(c); if (hidden()) hold(c); } };
+    function hold(c) {
+      try { if (SUS && c.state === 'running') { if (held.indexOf(c) < 0) held.push(c); SUS.call(c); } } catch (e) {}
+    }
+    if (proto) {
+      ['createGain', 'createOscillator', 'createBufferSource', 'createBiquadFilter', 'createDynamicsCompressor', 'createMediaElementSource'].forEach(function (m) {
+        var o = proto[m]; if (typeof o !== 'function') return;
+        proto[m] = function () { reg(this); return o.apply(this, arguments); };
+      });
+      var dd = Object.getOwnPropertyDescriptor(proto, 'destination');
+      if (dd && dd.get && dd.configurable) Object.defineProperty(proto, 'destination', { configurable: true, enumerable: dd.enumerable, get: function () { reg(this); return dd.get.call(this); } });
+      // suspend/resume 은 브라우저에 따라 AudioContext 쪽에 있음
+      var rp = (AC && AC.prototype.resume) ? AC.prototype : proto;
+      var oRes = rp.resume, oSus = rp.suspend;
+      SUS = oSus; RES = oRes;
+      if (oRes) rp.resume = function () { reg(this); if (hidden()) { if (held.indexOf(this) < 0) held.push(this); return Promise.resolve(); } return oRes.apply(this, arguments); };
+      if (oSus) rp.suspend = function () { var i = held.indexOf(this); if (i >= 0) held.splice(i, 1); return oSus.apply(this, arguments); };
+    }
+    var MP = window.HTMLMediaElement && HTMLMediaElement.prototype;
+    if (MP && MP.play) {
+      var oPlay = MP.play;
+      MP.play = function () {
+        if (medias.indexOf(this) < 0) medias.push(this);
+        if (hidden()) { if (heldMedia.indexOf(this) < 0) heldMedia.push(this); return Promise.resolve(); }
+        return oPlay.apply(this, arguments);
+      };
+      MP.__arPlay = oPlay;
+    }
+    var ss = window.speechSynthesis;
+    if (ss && ss.speak) { var oSpeak = ss.speak.bind(ss); try { ss.speak = function (u) { if (!hidden()) oSpeak(u); }; } catch (e) {} }
+
+    var off = false;
+    function goBg() {
+      if (off) return; off = true;
+      ctxs.forEach(hold);
+      document.querySelectorAll('audio,video').forEach(function (m) { if (medias.indexOf(m) < 0) medias.push(m); });
+      medias.forEach(function (m) { try { if (!m.paused) { heldMedia.push(m); m.pause(); } } catch (e) {} });
+      try { if (ss) ss.cancel(); } catch (e) {}
+    }
+    function goFg() {
+      if (!off || hidden()) return; off = false;
+      held.splice(0).forEach(function (c) { try { if (RES && c.state !== 'closed') RES.call(c); } catch (e) {} });
+      heldMedia.splice(0).forEach(function (m) { try { MP.__arPlay.call(m).catch(function () {}); } catch (e) {} });
+    }
+    document.addEventListener('visibilitychange', function () { hidden() ? goBg() : goFg(); });
+    window.addEventListener('pagehide', goBg);
+    window.addEventListener('pageshow', function () { if (!hidden()) goFg(); });
+    document.addEventListener('freeze', goBg);
+    document.addEventListener('resume', goFg);
+    if (hidden()) goBg();
+  })();
 
   var me = document.currentScript || (function () { var s = document.getElementsByTagName('script'); return s[s.length - 1]; })();
   var opt = function (k, d) { return (me && me.getAttribute('data-' + k)) || d; };
@@ -60,6 +121,7 @@
   function ready(fn) { if (document.readyState !== 'loading') fn(); else document.addEventListener('DOMContentLoaded', fn); }
 
   ready(function () {
+    if (opt('ui', 'on') === 'off') return;
     var st = document.createElement('style'); st.textContent = css; document.head.appendChild(st);
     var dock = document.createElement('div'); dock.className = 'ar-dock';
 
