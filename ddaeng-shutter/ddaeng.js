@@ -881,12 +881,14 @@
     const key = `ddaeng-${Date.now()}-${Math.random()}`;
     const rng = randomFor(key + 'names');
     const used = new Set();
-    const course = makeCourse(key);
-    const errands = course.list.map((p) => ITEMS[p].name);
+    const errands = makeCourse(key).list.map((p) => ITEMS[p].name);
     const players = attract
       ? [0, 1, 2, 3].map((i) => { const a = nickname(rng, used); return { uid: `bot${i}`, nick: a, short: a, bot: true }; })
       : [{ uid: 'me', nick: '나', short: '나' }, ...[1, 2, 3].map((i) => { const a = nickname(rng, used); return { uid: `bot${i}`, nick: `${errands[i % 4]} 사러 간 ${a}`, short: a, bot: true }; })];
-    return { attract, key, course, players, uid: attract ? null : 'me', start: Date.now() - (attract ? countdown + 4000 : 0), raw: {}, inputs: new Map(), version: 0, computed: -1, tick: -1,
+    return baseMatch({ attract, key, players, uid: attract ? null : 'me', start: Date.now() - (attract ? countdown + 4000 : 0) });
+  }
+  function baseMatch(fields) {
+    return { live: false, attract: false, ...fields, course: makeCourse(fields.key), raw: {}, inputs: new Map(), version: 0, computed: -1, tick: -1,
       effectT: -1, positions: new Map(), particles: [], popups: [], phaseShown: -1, announced: '', finalized: false, endSound: false, rattled: new Set() };
   }
   function startPractice() {
@@ -900,14 +902,15 @@
   function unlockSafe() { try { unlockAudio(); } catch { /* 소리를 쓸 수 없는 브라우저 */ } }
   function switchView(name) {
     view = name;
-    $('home').hidden = name !== 'home';
-    $('game').hidden = name !== 'game';
-    if (name === 'home') { match = undefined; held = null; }
+    for (const id of ['home', 'room', 'game']) $(id).hidden = name !== id;
+    if (name !== 'game') held = null;
+    if (name === 'home') match = undefined;
+    if (name === 'room') renderRoom();
   }
   function move(direction) {
     const current = match;
     if (!current || view !== 'game' || current.finalized) return;
-    const now = Date.now();
+    const now = clock(current);
     const elapsed = now - current.start - countdown;
     if (elapsed < -100 || elapsed >= duration * quantum || now - lastDirectionTime < 110) return;
     let t = Math.max(0, Math.floor(elapsed / quantum) + 1);
@@ -919,6 +922,7 @@
     const timeline = new Map(Object.entries(own).map(([k, v]) => [Number(k), v]));
     current.inputs.set(current.uid, timeline);
     current.version++;
+    if (current.live && net) net.ref.child(`in/${current.key}/${current.uid}/${t}`).set(direction).catch(() => {});
     tone('move');
   }
 
@@ -1032,9 +1036,17 @@
         table.append(li);
       });
       const again = document.createElement('button'); again.className = 'button primary'; again.type = 'button'; again.textContent = '한 판 더!';
-      again.addEventListener('click', startPractice);
-      const home = document.createElement('button'); home.className = 'button'; home.type = 'button'; home.textContent = '처음으로';
-      home.addEventListener('click', () => switchView('home'));
+      const home = document.createElement('button'); home.className = 'button'; home.type = 'button';
+      if (current.live) {
+        again.textContent = '대기실로 (다음 판)';
+        again.addEventListener('click', () => { if (net) { net.seen.add(current.key); match = undefined; switchView('room'); } else switchView('home'); });
+        home.textContent = '나가기';
+        home.addEventListener('click', () => void leaveRoom(false));
+      } else {
+        again.addEventListener('click', startPractice);
+        home.textContent = '처음으로';
+        home.addEventListener('click', () => switchView('home'));
+      }
       const row = document.createElement('div'); row.className = 'row'; row.append(again, home);
       overlay.replaceChildren(title, table, row);
     }
@@ -1061,11 +1073,12 @@
       paint($('hero'), demo, frame, step, elapsed);
       return;
     }
+    if (view === 'room') { if (now - (net?.drawn ?? 0) > 250 && net) { net.drawn = now; renderRoom(); } return; }
     if (!match) return;
     const current = match;
-    const elapsed = now - current.start - countdown;
+    const elapsed = clock(current) - current.start - countdown;
     if (held && now >= nextRepeat) { nextRepeat = now + 180; move(held.direction); }
-    if (elapsed >= duration * quantum + 600) current.finalized = true;
+    if (elapsed >= duration * quantum + (current.live ? 1200 : 600)) { if (current.live) finishLive(current); else current.finalized = true; }
     const step = Math.max(0, Math.min(duration - 1, elapsed / quantum));
     const whole = Math.floor(step);
     const frame = frameOf(current, whole);
@@ -1097,9 +1110,311 @@
   }
   function loop() { try { tick(); } catch (error) { console.error(error); } requestAnimationFrame(loop); }
 
+  /* ───────────── 실시간 대결 (Firebase · breaktime-arcade-live 공용) ───────────── */
+  const CFG = {
+    apiKey: 'AIzaSyC5o_QG5ipd4mYpFwMiGvdIKe5BmD0bFy8',
+    authDomain: 'breaktime-arcade-live.firebaseapp.com',
+    databaseURL: 'https://breaktime-arcade-live-default-rtdb.asia-southeast1.firebasedatabase.app',
+    projectId: 'breaktime-arcade-live',
+    storageBucket: 'breaktime-arcade-live.firebasestorage.app',
+    messagingSenderId: '411045673216',
+    appId: '1:411045673216:web:5222680b2229c0bf115be5'
+  };
+  const SDK = 'https://www.gstatic.com/firebasejs/10.12.2/';
+  const ROOT = 'ddaeng';
+  const MAXP = 4;
+  const WAIT_MS = 15000;
+  const CODE_ABC = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
+  const ERRANDS = ['두부', '콩나물', '계란', '우유', '라면', '붕어빵', '참기름', '사과'];
+  const LIVE_END = countdown + duration * quantum;
+  let db = null, uid = null, offset = 0, net = null, booting = null, netBusy = false;
+  const serverNow = () => Date.now() + offset;
+  const clock = (m) => (m.live ? serverNow() : Date.now());
+  const pickOne = (a) => a[Math.floor(Math.random() * a.length)];
+
+  function loadScript(src) {
+    return new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = src; s.onload = resolve; s.onerror = () => reject(new Error(`load ${src}`));
+      document.head.appendChild(s);
+    });
+  }
+  function boot() {
+    if (db) return Promise.resolve();
+    booting ??= (async () => {
+      if (!window.firebase) {
+        await loadScript(`${SDK}firebase-app-compat.js`);
+        await Promise.all([loadScript(`${SDK}firebase-auth-compat.js`), loadScript(`${SDK}firebase-database-compat.js`)]);
+      }
+      const fb = window.firebase;
+      if (!fb.apps.length) fb.initializeApp(CFG);
+      const auth = fb.auth();
+      await auth.setPersistence(fb.auth.Auth.Persistence.SESSION);
+      const cred = auth.currentUser ? { user: auth.currentUser } : await auth.signInAnonymously();
+      uid = cred.user.uid;
+      db = fb.database();
+      db.ref('.info/serverTimeOffset').on('value', (s) => { offset = Number(s.val()) || 0; });
+    })().catch((error) => { booting = null; throw error; });
+    return booting;
+  }
+  const TS = () => window.firebase.database.ServerValue.TIMESTAMP;
+  const roomRef = (rid) => db.ref(`${ROOT}/rooms/${rid}`);
+  const lobbyRef = (rid) => db.ref(`${ROOT}/lobby${rid ? `/${rid}` : ''}`);
+  function say(id, text, bad = false) { const el = $(id); if (!el) return; el.textContent = text; el.classList.toggle('bad', bad); }
+  function netError(error, where = 'net-msg') {
+    const code = String(error?.code ?? error?.message ?? '');
+    say(where, /permission/i.test(code) ? 'Firebase 규칙에서 막혔어요. 규칙에 ddaeng 항목을 추가했는지 확인해 주세요.'
+      : /operation-not-allowed/i.test(code) ? 'Firebase에서 익명 로그인을 켜 주세요.'
+      : error?.display ?? '서버에 연결하지 못했어요. 인터넷을 확인하고 다시 시도해 주세요.', true);
+  }
+  function fail(display) { return Object.assign(new Error(display), { display }); }
+  async function busy(work) {
+    if (netBusy) return;
+    netBusy = true;
+    document.querySelectorAll('.net-btn').forEach((b) => { b.disabled = true; });
+    say('net-msg', '연결하는 중…');
+    try { await work(); } catch (error) { netError(error); }
+    finally { netBusy = false; document.querySelectorAll('.net-btn').forEach((b) => { b.disabled = false; }); }
+  }
+  function makeCode() { return Array.from(crypto.getRandomValues(new Uint8Array(6)), (v) => CODE_ABC[v % CODE_ABC.length]).join(''); }
+  function freshNick(players) {
+    const used = new Set(Object.values(players ?? {}).map((p) => p.a));
+    const free = ANIMALS.filter((a) => !used.has(a));
+    const a = free.length ? pickOne(free) : pickOne(ANIMALS);
+    return { a, nm: `${pickOne(ERRANDS)} 사러 간 ${a}` };
+  }
+
+  async function quickMatch() {
+    await boot();
+    const now = serverNow();
+    const list = Object.entries((await lobbyRef().once('value')).val() ?? {})
+      .filter(([, r]) => r && r.n > 0 && r.n < MAXP && r.t > now - 20000)
+      .sort((a, b) => b[1].n - a[1].n);
+    for (const [rid] of list) if (await joinRoom(rid, true)) return;
+    await createRoom(false);
+  }
+  async function createRoom(priv) {
+    await boot();
+    let lastError;
+    for (let i = 0; i < 4; i++) {
+      const rid = makeCode();
+      const me = freshNick({});
+      try {
+        await roomRef(rid).set({
+          meta: { host: uid, created: TS(), priv: !!priv },
+          s: priv ? { phase: 'wait' } : { phase: 'wait', waitUntil: serverNow() + WAIT_MS },
+          players: { [uid]: { nm: me.nm, a: me.a, j: TS(), rd: false } }
+        });
+        await enterRoom(rid, me);
+        return;
+      } catch (error) { lastError = error; }
+    }
+    throw lastError;
+  }
+  async function joinRoom(rid, quick) {
+    await boot();
+    const r = (await roomRef(rid).once('value')).val();
+    if (!r?.meta) { if (quick) return false; throw fail('방을 찾지 못했어요. 방 코드를 확인해 주세요.'); }
+    if (r.players?.[uid]) { await enterRoom(rid, { a: r.players[uid].a, nm: r.players[uid].nm }); return true; }
+    if (Object.keys(r.players ?? {}).length >= MAXP) { if (quick) return false; throw fail('방이 가득 찼어요 (최대 4명).'); }
+    const me = freshNick(r.players);
+    await roomRef(rid).child(`players/${uid}`).set({ nm: me.nm, a: me.a, j: TS(), rd: false });
+    await enterRoom(rid, me);
+    return true;
+  }
+  async function enterRoom(rid, me) {
+    if (net) await leaveRoom(true);
+    const ref = roomRef(rid);
+    ref.child(`players/${uid}`).onDisconnect().remove();
+    net = { rid, ref, me, data: null, seen: new Set(), timer: null, beat: 0, starting: false, lobbyHook: false };
+    const handler = ref.on('value', (snap) => onRoom(snap.val()), (error) => netError(error, 'room-msg'));
+    net.off = () => ref.off('value', handler);
+    net.timer = setInterval(hostDuty, 400);
+    say('net-msg', '');
+    say('room-msg', '');
+    switchView('room');
+  }
+  async function leaveRoom(silent) {
+    const current = net;
+    if (!current) return;
+    net = null;
+    clearInterval(current.timer);
+    current.off?.();
+    if (match?.live) match = undefined;
+    try {
+      const r = current.data;
+      const alone = !r || Object.keys(r.players ?? {}).filter((u) => u !== uid).length === 0;
+      await current.ref.child(`players/${uid}`).onDisconnect().cancel();
+      await current.ref.child(`players/${uid}`).remove();
+      if (alone) { await current.ref.remove(); await lobbyRef(current.rid).remove(); }
+    } catch { /* 연결이 끊겨도 onDisconnect가 정리해요 */ }
+    if (!silent) switchView('home');
+  }
+
+  function onRoom(r) {
+    if (!net) return;
+    if (!r?.meta) { const was = net; net = null; clearInterval(was.timer); was.off?.(); switchView('home'); say('net-msg', '방이 닫혔어요.', true); return; }
+    net.data = r;
+    if (!r.players?.[uid]) net.ref.child(`players/${uid}`).set({ nm: net.me.nm, a: net.me.a, j: TS(), rd: false }).catch(() => {});
+    const s = r.s ?? {};
+    if (s.phase === 'play' && s.key) {
+      const mine = (s.roster ?? []).some((p) => p.uid === uid);
+      const fresh = serverNow() < s.start + LIVE_END + 1500;
+      if (mine && fresh && !net.seen.has(s.key) && match?.key !== s.key) startLive(s);
+      if (match?.live && match.key === s.key && !match.finalized) feedInputs(match, r.in?.[s.key]);
+    }
+    if (view === 'room') renderRoom();
+  }
+
+  function startLive(s) {
+    unlockSafe();
+    const players = s.roster.map((p) => ({ uid: p.uid, nick: p.nm, short: p.a, bot: !!p.bot }));
+    match = baseMatch({ live: true, key: s.key, players, uid, start: s.start });
+    if (net.data.players?.[uid]?.rd) net.ref.child(`players/${uid}/rd`).set(false).catch(() => {});
+    lastHud = '';
+    switchView('game');
+    $('overlay').hidden = true;
+    buildNote();
+    feedInputs(match, net.data.in?.[s.key]);
+  }
+  function feedInputs(current, raw) {
+    for (const p of current.players) {
+      if (p.bot) continue;
+      const remote = raw?.[p.uid] ?? {};
+      const merged = p.uid === current.uid ? { ...remote, ...current.raw[p.uid] } : remote;
+      const timeline = new Map();
+      for (const [t, d] of Object.entries(merged)) if ((d === 1 || d === -1) && Number(t) >= 0 && Number(t) < duration) timeline.set(Number(t), d);
+      current.inputs.set(p.uid, timeline);
+    }
+    current.version++;
+  }
+  function finishLive(current) {
+    if (current.finalPending || current.finalized || !net) return;
+    current.finalPending = true;
+    net.ref.child(`in/${current.key}`).once('value').then((snap) => {
+      if (match !== current) return;
+      feedInputs(current, snap.val());
+      current.finalized = true;
+    }).catch(() => { current.finalized = true; }).finally(() => { current.finalPending = false; });
+  }
+
+  function hostDuty() {
+    const r = net?.data;
+    if (!r?.meta) return;
+    const players = Object.entries(r.players ?? {}).sort((a, b) => (a[1].j || 0) - (b[1].j || 0));
+    if (!r.players?.[r.meta.host]) {
+      if (players[0]?.[0] === uid) net.ref.child('meta/host').set(uid).catch(() => {});
+      return;
+    }
+    if (r.meta.host !== uid) return;
+    const now = serverNow();
+    const s = r.s ?? {};
+    if (!r.meta.priv && now - net.beat > 4000) {
+      net.beat = now;
+      lobbyRef(net.rid).set({ n: players.length, t: now, play: s.phase === 'play' }).catch(() => {});
+      if (!net.lobbyHook) { net.lobbyHook = true; lobbyRef(net.rid).onDisconnect().remove(); }
+    }
+    if (net.starting) return;
+    if (s.phase === 'wait') {
+      if (!players.length) return;
+      if (!r.meta.priv && !s.waitUntil) { net.ref.child('s/waitUntil').set(now + WAIT_MS).catch(() => {}); return; }
+      const ready = players.every(([, p]) => p.rd);
+      const go = r.meta.priv ? ready : (ready && players.length >= 2) || now >= s.waitUntil;
+      if (!go) return;
+      const humans = players.slice(0, MAXP).map(([u, p]) => ({ uid: u, nm: p.nm, a: p.a }));
+      const used = new Set(humans.map((p) => p.a));
+      const roster = [...humans];
+      for (let i = 1; roster.length < MAXP; i++) {
+        const a = ANIMALS.find((x) => !used.has(x)) ?? `AI${i}`;
+        used.add(a);
+        roster.push({ uid: `bot${i}`, nm: `${pickOne(ERRANDS)} 사러 간 ${a}`, a, bot: true });
+      }
+      net.starting = true;
+      const key = net.ref.child('in').push().key;
+      net.ref.child('s').set({ phase: 'play', key, start: now + 1200, roster }).catch((error) => netError(error, 'room-msg')).finally(() => { if (net) net.starting = false; });
+    } else if (s.phase === 'play' && now > s.start + LIVE_END + 9000) {
+      net.starting = true;
+      Promise.all([net.ref.child('in').remove(), net.ref.child('s').set(r.meta.priv ? { phase: 'wait' } : { phase: 'wait', waitUntil: now + WAIT_MS })])
+        .catch(() => {}).finally(() => { if (net) net.starting = false; });
+    }
+  }
+
+  function renderRoom() {
+    const r = net?.data;
+    if (!r?.meta) return;
+    const s = r.s ?? {};
+    const players = Object.entries(r.players ?? {}).sort((a, b) => (a[1].j || 0) - (b[1].j || 0));
+    const now = serverNow();
+    $('room-kind').textContent = r.meta.priv ? '친구 방' : '공개 대기실';
+    $('room-title').textContent = r.meta.priv ? `방 코드 ${net.rid}` : '같이 할 친구를 찾는 중';
+    $('invite').hidden = !r.meta.priv;
+    const signature = JSON.stringify([players, r.meta.host, uid]);
+    const seatEls = [];
+    for (let i = 0; i < (signature === net.seatSig ? 0 : MAXP); i++) {
+      const li = document.createElement('li');
+      const entry = players[i];
+      if (entry) {
+        const [u, p] = entry;
+        li.style.setProperty('--c', COLORS[i]);
+        if (u === uid) li.className = 'me';
+        const top = document.createElement('b'); top.textContent = `${u === r.meta.host ? '👑 ' : ''}${p.a}${u === uid ? ' (나)' : ''}`;
+        const sub = document.createElement('span'); sub.textContent = p.nm;
+        const st = document.createElement('em'); st.textContent = p.rd ? '준비 완료!' : '준비 중'; st.className = p.rd ? 'ok' : '';
+        li.append(top, sub, st);
+      } else {
+        li.className = 'empty';
+        const top = document.createElement('b'); top.textContent = '빈자리';
+        const sub = document.createElement('span'); sub.textContent = 'AI 친구가 채워요';
+        li.append(top, sub);
+      }
+      seatEls.push(li);
+    }
+    if (signature !== net.seatSig) { net.seatSig = signature; $('seats').replaceChildren(...seatEls); }
+    const mine = r.players?.[uid];
+    let status;
+    if (s.phase === 'play') {
+      const inside = (s.roster ?? []).some((p) => p.uid === uid);
+      status = inside ? '경기 결과를 정리하는 중이에요. 곧 다음 판을 준비해요!' : '지금 경기가 진행 중이에요. 다음 판에 함께해요!';
+    } else if (r.meta.priv) status = players.length < 2 ? '방 코드를 친구에게 알려 주세요. 모두 준비 완료를 누르면 출발해요 (빈자리는 AI).' : '모두 준비 완료를 누르면 출발해요! 빈자리는 AI가 채워요.';
+    else status = `${Math.max(0, Math.ceil(((s.waitUntil ?? now + WAIT_MS) - now) / 1000))}초 뒤 출발! ${players.length >= 2 ? '모두 준비하면 바로 출발해요.' : '그동안 들어오는 친구와 함께 달려요.'}`;
+    $('room-status').textContent = status;
+    $('ready').textContent = mine?.rd ? '준비 취소' : '준비 완료!';
+    $('ready').disabled = s.phase === 'play';
+  }
+
+  async function copyText(text) {
+    try { await navigator.clipboard.writeText(text); return true; }
+    catch {
+      const box = document.createElement('textarea'); box.value = text; box.style.cssText = 'position:fixed;opacity:0';
+      document.body.append(box); box.select();
+      try { return document.execCommand('copy'); } catch { return false; } finally { box.remove(); }
+    }
+  }
+
   /* ───────────── 입력 ───────────── */
   $('practice').addEventListener('click', startPractice);
-  $('exit').addEventListener('click', () => switchView('home'));
+  $('exit').addEventListener('click', () => { if (match?.live || net) void leaveRoom(false); else switchView('home'); });
+  $('quick').addEventListener('click', () => void busy(quickMatch));
+  $('create').addEventListener('click', () => void busy(() => createRoom(true)));
+  $('join').addEventListener('submit', (event) => {
+    event.preventDefault();
+    const code = $('code').value.trim().toUpperCase();
+    if (!/^[2-9A-HJ-NP-Z]{6}$/.test(code)) { say('net-msg', '방 코드 6글자를 확인해 주세요.', true); return; }
+    void busy(() => joinRoom(code, false));
+  });
+  $('ready').addEventListener('click', () => {
+    const mine = net?.data?.players?.[uid];
+    if (mine) net.ref.child(`players/${uid}/rd`).set(!mine.rd).catch((error) => netError(error, 'room-msg'));
+  });
+  $('leave').addEventListener('click', () => void leaveRoom(false));
+  $('invite').addEventListener('click', async () => {
+    if (!net) return;
+    const ok = await copyText(`땡 셔터 같이 해요! '쉬는시간 오락실'에서 땡 셔터를 열고 방 코드 ${net.rid} 를 입력하세요.`);
+    say('room-msg', ok ? '초대 문구를 복사했어요. 친구에게 붙여 넣어 보내 주세요!' : `방 코드: ${net.rid}`);
+  });
+  window.addEventListener('pagehide', () => { if (net) void leaveRoom(true); });
+  const invited = new URLSearchParams(location.search).get('room')?.toUpperCase();
+  if (invited && /^[2-9A-HJ-NP-Z]{6}$/.test(invited)) { $('code').value = invited; void busy(() => joinRoom(invited, false)); }
   $('sound').addEventListener('click', () => {
     soundOn = !soundOn;
     $('sound').textContent = soundOn ? '🔊 소리 끄기' : '🔈 소리 켜기';
@@ -1144,5 +1459,6 @@
   });
   window.addEventListener('keyup', (event) => { if (held?.id === event.key || held?.id === event.key.toLowerCase()) held = null; });
   window.addEventListener('blur', () => { held = null; });
+  window.__ddaengReady = 3;
   requestAnimationFrame(loop);
 })();
