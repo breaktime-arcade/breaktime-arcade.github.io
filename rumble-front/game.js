@@ -1247,6 +1247,15 @@ function drawOverlay(dt, t) {
     bar(u.x - bw / 2, by, bw, big ? 5 : 3, u.hp / u.maxhp, u.team === 0 ? (u.hero ? '#ffd45c' : '#7dff6a') : '#ff5a5a');
     if (big) text(ENEMIES[u.type].name, u.x, by - 9, 11, '#ffb2b2', 'center', 3);
     if (u.evo && u.team === 0) text('★', u.x + bw / 2 + 5, by + 1, 9, '#ffd45c', 'center', 2);
+    // 협동: 지휘관 머리 위에 플레이어 이름 (색 = 병력 테두리 색, 내 지휘관은 ▼ 표시)
+    if (u.hero && g.n > 1) {
+      const q = g.P[u.o], mine = u.o === ME, nm = (mine ? '▼ ' : '') + q.nm;
+      ctx.font = '800 12px "Pretendard","Apple SD Gothic Neo","Malgun Gothic",sans-serif';
+      const tw = ctx.measureText(nm).width + 12, ty = by - 11;
+      ctx.fillStyle = 'rgba(15,10,35,.7)'; ctx.beginPath(); ctx.roundRect(u.x - tw / 2, ty - 8, tw, 16, 8); ctx.fill();
+      ctx.strokeStyle = OWN_COL[u.o]; ctx.lineWidth = mine ? 2 : 1.2; ctx.stroke();
+      text(nm, u.x, ty, 12, mine ? '#ffffff' : OWN_COL[u.o], 'center', 0);
+    }
   }
   for (const tx of texts) {
     tx.life -= dt; tx.y -= 40 * dt;
@@ -1539,7 +1548,12 @@ function openTalents(k) {
   });
   show('talent', true);
 }
-function toLobby() { state = 'lobby'; G = null; NETMODE = false; ME = 0; drag = null; buildLobby(); show('lobby', true); }
+function toLobby() {
+  state = 'lobby'; G = null; NETMODE = false; ME = 0; drag = null; paused = false;
+  for (const id of ['coop', 'result', 'pause', 'talent']) show(id, false);
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, hud.width, hud.height);
+  buildLobby(); show('lobby', true);
+}
 
 async function goFullscreen() {
   try {
@@ -1617,7 +1631,7 @@ async function coopDo(fn) {
 }
 const myProfile = () => profileOf(save.cmd);
 $('coopBtn').onclick = () => { goFullscreen(); openCoop(); };
-$('cpBack').onclick = () => { if (window.RFNet.code) window.RFNet.leave(); show('coop', false); buildLobby(); };
+$('cpBack').onclick = () => { if (window.RFNet.code) window.RFNet.leave(); show('coop', false); toLobby(); };
 $('cpReroll').onclick = () => { $('cpNick').textContent = window.RFNet.rerollNick(); };
 $('cpCreate').onclick = () => coopDo(async () => { coopMsg('방을 만드는 중…'); await window.RFNet.create(myProfile(), Math.min(save.stage, save.cleared + 1)); coopScreen('room'); coopMsg(''); renderRoom(); });
 $('cpQuick').onclick = () => coopDo(async () => { coopMsg('함께할 방을 찾는 중…'); await window.RFNet.quick(myProfile(), Math.min(save.stage, save.cleared + 1)); coopScreen('room'); coopMsg(''); renderRoom(); });
@@ -1681,7 +1695,8 @@ function backToRoom() {
   state = 'lobby'; G = null; NETMODE = false; ME = 0;
   if (!N.code) { toLobby(); return; }
   if (N.isHost()) N.backToRoom();
-  show('lobby', false); show('coop', true); coopScreen('room'); renderRoom();
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, hud.width, hud.height);
+  show('lobby', true); show('coop', true); coopScreen('room'); renderRoom();
 }
 function leaveCoop() {
   window.RFNet.leave();
