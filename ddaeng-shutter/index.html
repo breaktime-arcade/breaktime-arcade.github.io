@@ -32,7 +32,6 @@ button{font:inherit;cursor:pointer;touch-action:manipulation}button:disabled{opa
 .hero{position:relative;overflow:hidden;padding:0;border-radius:22px}
 .hero canvas{display:block;width:100%;height:clamp(300px,52vh,460px)}
 .hero-card{position:absolute;left:50%;top:50%;transform:translate(-50%,-56%) rotate(-2deg);text-align:center;background:var(--paper);border:3px solid var(--ink);border-radius:20px;box-shadow:0 6px 0 var(--ink);padding:16px 26px 18px;width:min(88%,380px)}
-.hero-card:before{content:"";position:absolute;left:50%;top:-14px;width:90px;height:24px;transform:translateX(-50%) rotate(3deg);background:#ffe58acc;border:2px solid #3b2a2033}
 .hero h1{font-family:var(--title);font-weight:400;font-size:clamp(2.6rem,9vw,4.2rem);line-height:1;letter-spacing:-.02em;color:var(--red);text-shadow:3px 3px 0 var(--ink)}
 .hero h1 span{display:inline-block;color:var(--ink);text-shadow:3px 3px 0 #ffd23f;animation:shake 2.6s ease-in-out infinite;transform-origin:50% 100%}
 @keyframes shake{0%,70%,100%{transform:rotate(0)}74%{transform:rotate(-8deg)}80%{transform:rotate(7deg)}86%{transform:rotate(-4deg)}}
@@ -82,10 +81,24 @@ aside h3{font-family:var(--title);font-weight:400;font-size:1.1rem;margin-bottom
 .rank li.me{background:#fff3c4}
 .rank .who{font-family:var(--title)}.rank strong{font-family:var(--title);font-weight:400;color:var(--red)}.rank .bag{grid-column:1/-1;font-size:.95rem;min-height:1.3em;overflow-wrap:anywhere}
 .tip{font-size:.8rem;color:var(--muted);word-break:keep-all;margin-top:6px}
+.code-row{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-top:10px}
+.code-row .code{width:110px;min-height:38px;border:2.5px solid var(--ink);border-radius:12px;padding:4px 10px;font-family:var(--title);font-size:1rem;letter-spacing:.12em;text-transform:uppercase;background:#fff;color:var(--ink)}
+.soon.bad{color:var(--red);font-weight:700}
+.room{max-width:640px;margin:10px auto 24px}
+.room-head{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.room .tag{display:inline-block;font-family:var(--title);font-size:.8rem;background:var(--yellow);border:2px solid var(--ink);border-radius:8px;padding:0 8px;transform:rotate(-3deg)}
+.room h2{font-family:var(--title);font-weight:400;font-size:clamp(1.4rem,5vw,1.9rem);margin-top:4px}
+.seats{list-style:none;margin:0 0 12px;padding:0;display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.seats li{--c:#ff6b5a;display:grid;gap:1px;background:#fff;border:2.5px solid var(--ink);border-left:10px solid var(--c);border-radius:12px;padding:8px 10px;box-shadow:0 3px 0 var(--ink);animation:slide .35s ease-out}
+.seats li.me{background:#fff3c4}.seats b{font-family:var(--title);font-weight:400;font-size:1.1rem}.seats span{font-size:.8rem;color:var(--muted)}
+.seats em{font-style:normal;font-size:.82rem;color:var(--muted)}.seats em.ok{color:var(--green);font-weight:800}
+.seats li.empty{--c:#d8c8b4;border-style:dashed;box-shadow:none;background:#fffaf0;color:var(--muted);animation:wait 2s ease-in-out infinite}
+@keyframes wait{50%{background:#fff3dc}}
+.room-status{font-family:var(--hand);font-size:1.3rem;margin-bottom:10px;word-break:keep-all}
 @media(max-width:720px){.play{grid-template-columns:1fr}.cards{grid-template-columns:1fr 1fr}.rank{grid-template-columns:1fr 1fr}.track canvas{height:clamp(300px,52svh,440px)}}
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important}}
 </style>
-<script defer src="ddaeng.js?v=1"></script>
+<script defer src="ddaeng.js?v=3" onerror="window.__ddaengMissing=true"></script>
 <script defer src="../common/arcade.js"></script>
 </head>
 <body><div class="shell">
@@ -94,14 +107,24 @@ aside h3{font-family:var(--title);font-weight:400;font-size:1.1rem;margin-bottom
 <section id="home">
   <div class="panel hero"><canvas id="hero" aria-hidden="true"></canvas>
     <div class="hero-card"><h1>땡 <span>셔터</span></h1><p class="sub">해 지기 전에, 심부름 다녀오기!</p>
-      <div class="row"><button class="button primary" id="practice" type="button">🚲 혼자 연습 (AI 3명)</button></div>
-      <p class="soon">친구와 실시간 대결은 곧 열려요</p></div>
+      <div class="row"><button class="button primary net-btn" id="quick" type="button">👫 같이 하기</button><button class="button" id="practice" type="button">🚲 혼자 연습</button></div>
+      <form class="code-row" id="join"><input id="code" class="code" maxlength="6" autocomplete="off" autocapitalize="characters" placeholder="방 코드" aria-label="방 코드"><button class="button small net-btn" type="submit">입장</button><button class="button small net-btn" id="create" type="button">친구 방 만들기</button></form>
+      <p class="soon" id="net-msg">같이 하기: 다른 친구와 자동으로 만나요 · 빈자리는 AI가 채워요</p></div>
   </div>
   <div class="cards">
     <div class="card"><div class="ic">📝</div><b>엄마 쪽지</b>모두 같은 쪽지! 쪽지 물건은 3점, 덤 간식은 1점, 다 모으면 +5점</div>
     <div class="card"><div class="ic">🏪</div><b>인도에서 사기</b>양쪽 끝 줄(인도)에 있어야 가게 앞을 지나며 살 수 있어요</div>
     <div class="card"><div class="ic">🔻</div><b>셔터 조심</b>셔터가 다 내려오면 끝! 마지막 물건은 먼저 온 사람 차지</div>
     <div class="card"><div class="ic">🔔</div><b>떨이 종</b>종을 밟으면 다음 가게가 다시 열리고 물건이 2개 늘어나요</div>
+  </div>
+</section>
+<section id="room" hidden>
+  <div class="panel room">
+    <div class="room-head"><div><p class="tag" id="room-kind"></p><h2 id="room-title"></h2></div><button class="button small" id="invite" type="button">📋 초대 문구 복사</button></div>
+    <ul class="seats" id="seats" aria-label="참가자"></ul>
+    <p class="room-status" id="room-status"></p>
+    <div class="row"><button class="button primary" id="ready" type="button">준비 완료!</button><button class="button" id="leave" type="button">나가기</button></div>
+    <p class="soon" id="room-msg"></p>
   </div>
 </section>
 <section id="game" hidden>
@@ -117,5 +140,15 @@ aside h3{font-family:var(--title);font-weight:400;font-size:1.1rem;margin-bottom
   </div>
 </section>
 </main>
+<script>
+  window.addEventListener('load', function () {
+    if (window.__ddaengReady) return;
+    var card = document.querySelector('.soon');
+    var btn = document.getElementById('practice');
+    btn.disabled = true;
+    card.textContent = '게임 파일(ddaeng.js)을 불러오지 못했어요. index.html과 같은 폴더에 ddaeng.js가 있는지 확인해 주세요.';
+    card.style.color = '#e8503a';
+  });
+</script>
 <noscript>게임을 하려면 JavaScript를 켜 주세요.</noscript>
 </div></body></html>
