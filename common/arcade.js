@@ -164,3 +164,47 @@
     }
   });
 })();
+
+
+/* ===== 실시간 접속자 출석 (쉬는시간 오락실) ===== */
+(function () {
+  var DB = 'https://breaktime-arcade-live-default-rtdb.asia-southeast1.firebasedatabase.app';
+  var game = (location.pathname.split('/')[1] || '').toLowerCase();   // 예: /ddakji/ → ddakji
+  if (!/^[a-z0-9-]{1,40}$/.test(game) || game === 'common') return;
+
+  var id;
+  try { id = sessionStorage.getItem('ba_pid'); } catch (e) {}
+  if (!id) {
+    id = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    try { sessionStorage.setItem('ba_pid', id); } catch (e) {}
+  }
+  var base = DB + '/presence/' + game;
+  var url = base + '/' + id + '.json';
+  var timer = null;
+
+  function beat() {
+    fetch(url, { method: 'PUT', keepalive: true,
+      body: JSON.stringify({ t: { '.sv': 'timestamp' } }) }).catch(function () {});
+    if (Math.random() < 0.1) sweep();          // 가끔 오래된 기록 청소
+  }
+  function sweep() {
+    var cut = Date.now() - 180000;             // 3분 넘은 기록
+    fetch(base + '.json?orderBy=' + encodeURIComponent('"t"') + '&endAt=' + cut)
+      .then(function (r) { return r.json(); })
+      .then(function (old) {
+        if (!old) return;
+        var patch = {};
+        Object.keys(old).forEach(function (k) { patch[k] = null; });
+        if (Object.keys(patch).length)
+          fetch(base + '.json', { method: 'PATCH', body: JSON.stringify(patch) });
+      }).catch(function () {});
+  }
+  function start() { if (timer) return; beat(); timer = setInterval(beat, 30000); }
+  function leave() {
+    clearInterval(timer); timer = null;
+    fetch(url, { method: 'DELETE', keepalive: true }).catch(function () {});
+  }
+  document.addEventListener('visibilitychange', function () { document.hidden ? leave() : start(); });
+  window.addEventListener('pagehide', leave);
+  if (!document.hidden) start();
+})();
