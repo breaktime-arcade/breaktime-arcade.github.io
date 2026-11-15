@@ -66,6 +66,7 @@
       on(p, cb) { const r = db.ref(p), f = s => cb(s.val()); r.on('value', f); return () => r.off('value', f); },
       onChild(p, cb) { const r = db.ref(p), f = s => cb(s.key, s.val()); r.on('child_added', f); return () => r.off('child_added', f); },
       txn: (p, fn) => db.ref(p).transaction(fn).then(r => ({ ok: r.committed, val: r.snapshot.val() })),
+      top: (p, child, n) => db.ref(p).orderByChild(child).limitToLast(n).once('value').then(s => { const a = []; s.forEach(c => { a.push(Object.assign({ id: c.key }, c.val())); }); return a.reverse(); }),
       onDc: p => db.ref(p).onDisconnect().remove(),
       offDc: p => db.ref(p).onDisconnect().cancel(),
     };
@@ -116,6 +117,7 @@
       async txn(p, fn) { const cur = getAt(tree, p); const nv = fn(cur == null ? null : JSON.parse(JSON.stringify(cur))); if (nv === undefined) return { ok: false, val: cur }; emit({ k: 'set', p, v: nv }); return { ok: true, val: nv }; },
       onDc(p) { dcs.add(p); },
       offDc(p) { dcs.delete(p); },
+      async top(p, child, n) { const v = getAt(tree, p) || {}; return Object.entries(v).map(([id, o]) => Object.assign({ id }, o)).sort((a, b) => (b[child] || 0) - (a[child] || 0)).slice(0, n); },
       dump: () => tree,
     };
     return api;
@@ -142,27 +144,30 @@
     try { nick = sessionStorage.getItem('rf_nick') || randNick(); } catch (e) { nick = randNick(); }
   }
 
-  async function enter(c, prof) {
+  async function enter(c, prof, mode) {
     code = c;
-    const me = clean(Object.assign({ nm: nick, rd: false, j: B.now() }, prof));
+    let tm = 0;
+    if (mode === 'pvp') { const ps = Object.values((await B.get(ROOT + '/rooms/' + c + '/players')) || {}); const n0 = ps.filter(p => !p.tm).length; tm = n0 <= ps.length - n0 ? 0 : 1; }
+    const me = clean(Object.assign({ nm: nick, rd: false, j: B.now(), tm }, prof));
     await B.set(rp() + '/players/' + uid, me);
     B.onDc(rp() + '/players/' + uid);
     roomOffs.push(B.on(rp() + '/meta', v => { room.meta = v; onMeta(); }));
     roomOffs.push(B.on(rp() + '/players', v => { room.players = v || {}; onPlayers(); }));
   }
 
-  async function create(prof, stage) {
+  async function create(prof, stage, mode) {
+    mode = mode === 'pvp' ? 'pvp' : 'coop';
     await init();
     for (let i = 0; i < 12; i++) {
       const c = String(1000 + Math.floor(Math.random() * 9000));
       const r = await B.txn(ROOT + '/rooms/' + c + '/meta', cur => {
         if (cur && B.now() - (cur.at || 0) < STALE_MS * 3) return;     // 사용 중인 번호
-        return { host: uid, state: 'wait', stage: stage || 1, at: B.now(), gen: 0 };
+        return { host: uid, state: 'wait', stage: stage || 1, at: B.now(), gen: 0, mode };
       });
       if (r.ok) {
         await B.remove(ROOT + '/rooms/' + c + '/players');
         await B.remove(ROOT + '/rooms/' + c + '/g');
-        await enter(c, prof);
+        await enter(c, prof, mode);
         return c;
       }
     }
@@ -176,15 +181,17 @@
     const ps = (await B.get(ROOT + '/rooms/' + c + '/players')) || {};
     if (!Object.keys(ps).length) throw new Error('그 번호의 방이 없어요');
     if (Object.keys(ps).length >= MAXP) throw new Error('방이 가득 찼어요 (최대 4명)');
-    await enter(c, prof);
+    await enter(c, prof, meta.mode);
     return c;
   }
-  async function quick(prof, stage) {
+  async function quick(prof, stage, mode) {
     await init();
+    mode = mode === 'pvp' ? 'pvp' : 'coop';
     const lob = (await B.get(ROOT + '/lobby')) || {};
-    const list = Object.entries(lob).filter(([, v]) => v && v.n < MAXP && B.now() - (v.t || 0) < STALE_MS).sort((a, b) => b[1].n - a[1].n);
+    const list = Object.entries(lob).filter(([, v]) => v && (v.mode || 'coop') === mode && v.n < MAXP && B.now() - (v.t || 0) < STALE_MS)
+      .sort((a, b) => mode === 'pvp' ? (a[1].n % 2) - (b[1].n % 2) || b[1].n - a[1].n : b[1].n - a[1].n);   // 대결은 상대를 기다리는 방(인원 홀수) 먼저
     for (const [c] of list) { try { return await join(c, prof); } catch (e) {} }
-    return create(prof, stage);
+    return create(prof, stage, mode);
   }
   function stopGen() { genOffs.forEach(f => f()); genOffs = []; hostRun = false; published = -1; pending = []; }
   function leave() {
@@ -210,7 +217,7 @@
     }
     if (isHost()) {
       if (room.meta && room.meta.state === 'wait') {
-        B.set(ROOT + '/lobby/' + code, { n: ps.length, stage: room.meta.stage, t: B.now(), hn: nick });
+        B.set(ROOT + '/lobby/' + code, { n: ps.length, stage: room.meta.stage, t: B.now(), hn: nick, mode: room.meta.mode || 'coop' });
         B.onDc(ROOT + '/lobby/' + code);
       }
       // 게임 중 나간 사람은 자동 전투로 넘긴다
@@ -226,7 +233,7 @@
     if (!m) { const c = code; leave(); call('onGone', '방이 사라졌어요 (' + c + ')'); return; }
     if (m.state === 'play' && m.gen && m.gen !== gen) startGen(m);
     if (m.state === 'wait' && isHost()) {
-      B.set(ROOT + '/lobby/' + code, { n: sortedPlayers().length, stage: m.stage, t: B.now(), hn: nick });
+      B.set(ROOT + '/lobby/' + code, { n: sortedPlayers().length, stage: m.stage, t: B.now(), hn: nick, mode: m.mode || 'coop' });
       B.onDc(ROOT + '/lobby/' + code);
     }
     call('onRoom');
@@ -244,7 +251,7 @@
       if (!v) return;
       for (const tick in v) { const vals = Object.values(v[tick] || {}); if (vals.length > 1 && vals.some(x => x !== vals[0])) { call('onDesync'); break; } }
     }));
-    call('onStart', { roster, seed: m.seed, stage: m.stage, startAt: m.startAt, me: meIdx });
+    call('onStart', { roster, seed: m.seed, stage: m.stage, startAt: m.startAt, me: meIdx, mode: m.mode || 'coop' });
   }
   // 방장이 매 프레임 호출: 필요한 턴까지 입력 묶음을 확정해 올린다
   function pump(tick, maxKnown) {
@@ -269,7 +276,10 @@
     if (!isHost()) return;
     const ps = sortedPlayers();
     if (ps.length < 2) return;
-    const ros = ps.slice(0, MAXP).map(([u, p]) => ({ uid: u, nm: p.nm, cmd: p.cmd, lv: p.lv, tal: p.tal || {} }));
+    const pvp = room.meta.mode === 'pvp';
+    if (pvp) { const n0 = ps.filter(e => !e[1].tm).length, n1 = ps.length - n0; if (n0 !== n1 || n0 > 2) return; }
+    const ord = pvp ? ps.slice().sort((a, b) => (a[1].tm | 0) - (b[1].tm | 0) || (a[1].j || 0) - (b[1].j || 0)) : ps;
+    const ros = ord.slice(0, MAXP).map(([u, p]) => ({ uid: u, nm: p.nm, cmd: p.cmd, lv: p.lv, tal: p.tal || {}, tm: pvp ? (p.tm | 0) : 0, rt: p.rt || 1000 }));
     const ng = (room.meta.gen || 0) + 1;
     await B.remove(rp() + '/g');
     await B.remove(ROOT + '/lobby/' + code);
@@ -296,5 +306,8 @@
     setProfile(prof) { if (code) B.update(rp() + '/players/' + uid, clean(prof)); },
     setReady(rd) { if (code) B.update(rp() + '/players/' + uid, { rd: !!rd }); },
     setStage(n) { if (code && isHost()) B.update(rp() + '/meta', { stage: n }); },
+    setTeam(tm) { if (code) B.update(rp() + '/players/' + uid, { tm: tm ? 1 : 0, rd: false }); },
+    async rankPut(gid, data) { await init(); return B.set(ROOT + '/rank/' + gid, clean(data)); },
+    async rankTop(n) { await init(); return B.top(ROOT + '/rank', 'r', n || 10); },
   };
 })();
