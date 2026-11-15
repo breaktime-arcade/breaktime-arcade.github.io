@@ -1,4 +1,4 @@
-const firebaseConfig = {
+window.FIREBASE_CONFIG = {
   apiKey: "AIzaSyC5o_QG5ipd4mYpFwMiGvdIKe5BmD0bFy8",
   authDomain: "breaktime-arcade-live.firebaseapp.com",
   databaseURL: "https://breaktime-arcade-live-default-rtdb.asia-southeast1.firebasedatabase.app",
