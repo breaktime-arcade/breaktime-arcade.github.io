@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>분식집 떡볶이 수비대 - 랜덤 합성 디펜스 (Bunsik Merge Defense)</title>
+<meta name="description" content="분식 타워를 뽑아 합성하고 불판 위에서 먹보 몬스터를 막아라! 설치 없이 브라우저에서 바로 하는 무료 3D 랜덤 합성 디펜스 게임.">
+<meta name="theme-color" content="#1a1020">
+<meta property="og:title" content="분식집 떡볶이 수비대 - 랜덤 합성 디펜스">
+<meta property="og:description" content="같은 분식 두 개를 합쳐 ★5 황금 분식 타워를 만들어라! 5종 분식 · 순환 트랙 디펜스.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ctext y='54' font-size='54'%3E%F0%9F%8D%A2%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Jua&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="wrap">
+  <canvas id="gl" aria-label="분식집 떡볶이 수비대 게임 화면"></canvas>
+  <div id="pops" aria-hidden="true"></div>
+  <div id="flash" aria-hidden="true"></div>
+  <div id="vignette" aria-hidden="true"></div>
+
+  <!-- 상단 HUD -->
+  <div id="top">
+    <div class="chip" id="cWave"><span class="ci">🌊</span><b id="waveNum">1</b><span class="cl">웨이브</span></div>
+    <div class="chip" id="cMon"><span class="ci">👾</span><b id="monNum">0</b><span class="cl">/ 35</span></div>
+    <div class="chip gold" id="cGold"><span class="ci">🪙</span><b id="goldNum">0</b></div>
+    <div class="chip best" id="cBest"><span class="ci">🏆</span><b id="bestNum">0</b></div>
+    <div class="sp"></div>
+    <button class="ib" id="btnSpeed" title="배속 (1x / 2x)">1x</button>
+    <button class="ib" id="btnSound" title="소리 켜기/끄기">🔊</button>
+  </div>
+
+  <!-- 보스 정보 -->
+  <div id="boss" class="hidden">
+    <div class="bossTop"><span id="bossName">먹보 대장</span><span id="bossTimer">30<span>s</span></span></div>
+    <div class="bossBarBg"><div class="bossBar" id="bossFill"></div></div>
+  </div>
+
+  <!-- 중앙 배너 / 토스트 -->
+  <div id="banner" class="hidden"><span id="bannerMain">WAVE 1</span><span id="bannerSub"></span></div>
+  <div id="toast" class="hidden"></div>
+  <div id="mergeToast" class="hidden"></div>
+
+  <!-- 하단 조작 -->
+  <div id="bottom">
+    <div id="ups" role="group" aria-label="분식 종류별 강화"></div>
+    <button id="btnSummon">
+      <span class="sIco">🍢</span>
+      <span class="sTxt">소환<small>빈 칸에 분식 타워!</small></span>
+      <span class="sCost" id="sumCost">🪙 20</span>
+    </button>
+  </div>
+
+  <!-- 선택한 타워 정보 -->
+  <div id="sel" class="hidden">
+    <div class="selHead">
+      <span class="selIco" id="selIco">🍢</span>
+      <div class="selName">
+        <b id="selName">어묵 꼬치</b>
+        <span id="selStar" class="stars">★</span>
+      </div>
+      <button id="selClose" class="selX" aria-label="닫기">✕</button>
+    </div>
+    <div class="selStats" id="selStats"></div>
+    <div class="selBtns">
+      <button id="btnSell">판매 <span id="sellPrice">🪙 12</span></button>
+      <button id="btnMergeHint">합성 방법</button>
+    </div>
+  </div>
+
+  <!-- 시작 화면 -->
+  <div id="intro">
+    <div class="introCard">
+      <div class="logoRow">🍢🌶️🍤🥟🧀</div>
+      <h1>분식집 <span>떡볶이</span> 수비대</h1>
+      <p class="sub">같은 분식 두 개를 합쳐 <b>★5 황금 분식</b>을 만들어라!</p>
+      <div class="tiles">
+        <div class="tile"><span>🍢</span><b>어묵 꼬치</b><small>빠른 연사</small></div>
+        <div class="tile"><span>🌶️</span><b>매운 떡볶이</b><small>화상 광역</small></div>
+        <div class="tile"><span>🍤</span><b>바삭 김말이</b><small>감속 관통</small></div>
+        <div class="tile"><span>🥟</span><b>왕만두</b><small>기절 한 방</small></div>
+        <div class="tile"><span>🧀</span><b>치즈 폭탄</b><small>버프·표식</small></div>
+      </div>
+      <button id="btnStart">영업 시작</button>
+      <div class="introFoot">
+        <span>🏆 최고 기록 <b id="introBest">0</b> 웨이브</span>
+        <span>PC · 모바일 모두 가능</span>
+      </div>
+      <div class="introTip">같은 <b>종류 + 성급</b> 분식을 <b>드래그</b>하거나 <b>두 번 탭</b>하면 합성!</div>
+    </div>
+  </div>
+
+  <!-- 게임 오버 -->
+  <div id="over" class="hidden">
+    <div class="overCard">
+      <div class="overEmoji" id="overEmoji">😵</div>
+      <h2 id="overTitle">가게 영업 종료!</h2>
+      <p id="overReason">먹보들이 트랙을 가득 채웠어요</p>
+      <div class="overStats">
+        <div><small>도달 웨이브</small><b id="overWave">0</b></div>
+        <div><small>최고 성급</small><b id="overStar">★0</b></div>
+        <div><small>최고 기록</small><b id="overBest">0</b></div>
+      </div>
+      <button id="btnAgain">다시 영업하기</button>
+    </div>
+  </div>
+
+  <!-- 로딩 / 오류 -->
+  <div id="loading">
+    <div class="ldBox">
+      <div class="ldPan">🍳</div>
+      <div class="ldText">불판 예열 중…</div>
+      <div class="ldBar"><i></i></div>
+    </div>
+  </div>
+  <div id="err" class="hidden">
+    <div class="errBox">
+      <b>게임을 불러오지 못했어요</b>
+      <p>인터넷 연결을 확인한 뒤 새로고침해 주세요.<br>(3D 그래픽 라이브러리를 내려받는 중 문제가 생겼어요)</p>
+      <button onclick="location.reload()">새로고침</button>
+    </div>
+  </div>
+</div>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module" src="game.js"></script>
+<script src="../common/arcade.js" defer></script>
+</body>
+</html>
