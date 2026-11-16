@@ -34,7 +34,8 @@
     'octopus-chef-orders': 'entry/octopus-chef-orders', 'cat-post-stamp-slam': 'entry/cat-post-stamp-slam',
     'duck-capsule-combo': 'entry/duck-capsule-combo', 'hamster-balloon-ride': 'entry/hamster-balloon-ride',
     'cake-half': 'entry/cake-half', 'reaction': 'entry/reaction', 'one-second-ago': 'entry/one-second-ago',
-    'jjokji': 'entry/jjokji', 'ddaeng-shutter': 'entry/ddaeng-shutter': 'rhythm-echo-class': 'bunsik-merge-defense'
+    'jjokji': 'entry/jjokji', 'ddaeng-shutter': 'entry/ddaeng-shutter': 'rhythm-echo-class': 'entry/rhythm-echo-class'
+    'bunsik-merge-defense': 'entry/bunsik-merge-defense'
   };
 
   // 4) 백그라운드 소리 정지 ----------------------------------------------
