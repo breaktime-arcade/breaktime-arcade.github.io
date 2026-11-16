@@ -889,7 +889,8 @@ function buildDiorama() {
   };
   neon(T.hx + T.w / 2 - 0.07, T.r + T.w / 2 - 0.07, 0xffb347, 0.45, 0.735);
   neon(T.hx - T.w / 2 + 0.07, Math.max(0.45, T.r - T.w / 2 + 0.07), 0x7fe6ff, 0.38, 0.736);
-  neon(BW - 0.24, 1.02, 0xff4d7d, 0.28, 0.745);
+  // 바닥 맨 바깥쪽 분홍·빨간 네온 테두리는 모바일 화면 하단에 가로 빨간 줄로 보여 제외 (선우 님 요청)
+  // neon(BW - 0.24, 1.02, 0xff4d7d, 0.28, 0.745);
 
   // 발광 띠 (받침대 아래 언더글로우)
   const glowRing = neon(BW - 0.02, 1.1, 0x59c8ff, 0.85, 0.12);
@@ -1871,8 +1872,8 @@ class Tower {
     }
   }
 
-  pulse() {
-    const r = this.range;
+  ensureAuraRing(radius) {
+    const r = radius || this.range;
     if (!this.auraRing) {
       const g = new THREE.RingGeometry(0.93, 1, 64, 1);
       g.rotateX(-Math.PI / 2); g.userData.shared = true;
@@ -1883,6 +1884,14 @@ class Tower {
       this.auraRing.scale.setScalar(r);
       root.add(this.auraRing);
     }
+    // 버프 범위 링은 이 치즈 타워를 선택했을 때만 보이게 (평소 화면 가림 방지)
+    this.auraRing.visible = (S.selected === this);
+    return this.auraRing;
+  }
+
+  pulse() {
+    const r = this.range;
+    this.ensureAuraRing(r);
     let marked = 0;
     for (const m of monsters) {
       if (!m.alive) continue;
@@ -2386,8 +2395,17 @@ function updateHUD(force) {
   if (S.selected && S.selected.alive) updateSelPanel();
 }
 
+function syncAuraRings() {
+  // 치즈 타워의 노란 버프 범위 링은 선택된 타워에서만 표시
+  for (const t of towers) {
+    if (S.selected === t && t.type === 'cheese') t.ensureAuraRing();
+    else if (t.auraRing) t.auraRing.visible = false;
+  }
+}
+
 function selectTower(t) {
   S.selected = t || null;
+  syncAuraRings();
   const sel = $('sel');
   if (!t) { sel.classList.add('hidden'); selRing.visible = false; return; }
   sel.classList.remove('hidden');
@@ -2491,6 +2509,7 @@ function bindInput() {
       const cell = gc >= 0 ? gc : ptr.tower.cell;
       const c = cellCenter(cell);
       ptr.tower.mesh.position.set(c.x, 1.62, c.z);
+      if (ptr.tower.auraRing && ptr.tower.auraRing.visible) ptr.tower.auraRing.position.set(c.x, 1.115, c.z);
       dragRing.visible = true;
       dragRing.position.set(c.x, 1.2, c.z);
       const occupied = S.grid[cell] && S.grid[cell] !== ptr.tower;
