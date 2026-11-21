@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>프라이 팩토리: 오토 디펜스 - 감자튀김 자동화 관전 게임 (Fry Factory Auto Defense)</title>
+<meta name="description" content="감자튀김 가게가 스스로 돌아갑니다. AI 점원과 로봇이 감자를 캐고 튀겨 팔고, 밤에는 변칙성 손님을 막아내는 3D 방치형 오토 디펜스. 설치 없이 브라우저에서 바로">
+<meta name="theme-color" content="#1b1208">
+<meta property="og:title" content="프라이 팩토리: 오토 디펜스">
+<meta property="og:description" content="감자 더미 → 탈피대 → 튀김기 → 드라이브스루. 가게가 자동으로 돌아가는 걸 구경하고, 돈이 모이면 기계를 사서 더 자동화하세요.">
+<meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ctext y='52' font-size='52'%3E%F0%9F%8D%9F%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Jua&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="wrap">
+  <canvas id="gl" aria-label="프라이 팩토리 오토 디펜스 3D 게임 화면"></canvas>
+  <div id="pops" aria-hidden="true"></div>
+  <div id="vignette" aria-hidden="true"></div>
+  <div id="alarm" aria-hidden="true"></div>
+
+  <!-- 상단 HUD -->
+  <div id="top">
+    <div class="chip money" id="cMoney"><span class="ci">💵</span><b id="moneyV">0</b></div>
+    <div class="chip clock" id="cClock"><span class="ci" id="phaseIco">☀️</span><b id="clockV">06:00</b><span class="cl" id="dayV">1일차</span></div>
+    <div class="chip fries" id="cFries"><span class="ci">🍟</span><b id="friesV">0</b><span class="cl">대기</span></div>
+    <div class="chip key" id="cKey"><span class="ci">🔑</span><b id="keyV">0%</b></div>
+    <div class="sp"></div>
+    <div class="hudbtns">
+      <button class="ib" id="btnSpeed" title="배속 (1x → 2x → 4x)" aria-label="배속">1x</button>
+      <button class="ib" id="btnPause" title="일시정지" aria-label="일시정지">⏸</button>
+      <button class="ib" id="btnCam" title="시점 초기화" aria-label="시점 초기화">🎥</button>
+      <button class="ib" id="btnSound" title="소리 켜기/끄기" aria-label="소리">🔊</button>
+    </div>
+  </div>
+
+  <!-- 밤 상태 띠 -->
+  <div id="nightbar" class="hidden">
+    <div class="nbTop"><span class="nbIco">🌙</span><b id="nbTitle">밤 8시 · 변칙성 경계</b><span id="nbClock">20:00</span></div>
+    <div class="nbBarBg"><div class="nbBar" id="nbFill"></div></div>
+    <div class="nbThreats" id="nbThreats"></div>
+  </div>
+
+  <div id="banner" class="hidden"><span id="bannerMain">DAY 1</span><span id="bannerSub"></span></div>
+  <div id="toast" class="hidden"></div>
+  <div id="hint">🖱️ 드래그 회전 · 휠/핀치 줌 · 우클릭/두 손가락 이동 · 가게는 알아서 돌아갑니다</div>
+
+  <!-- 하단 업그레이드 바 -->
+  <div id="bottom">
+    <div id="upHead">
+      <span class="uhIco">🛠️</span>
+      <span class="uhTxt">업그레이드 <small>돈이 모이면 눌러서 해금 · 의존 순서대로 열립니다</small></span>
+      <span class="uhKey" id="uhKeyBox"><span>🔑</span><b id="uhKey">0%</b></span>
+      <span class="uhMoney"><span>💵</span><b id="upMoney">0</b></span>
+    </div>
+    <div id="ups" role="group" aria-label="업그레이드"></div>
+  </div>
+
+  <!-- 아침 퍽 -->
+  <div id="puck" class="hidden">
+    <div class="puckCard">
+      <div class="puckHead">
+        <span class="puckIco">🌅</span>
+        <div><b>아침 퍽</b><small>오늘 하루 적용할 카드 하나를 고르세요</small></div>
+      </div>
+      <div id="puckCards"></div>
+      <div class="puckTimer"><div id="puckFill"></div><span id="puckSec">10</span></div>
+    </div>
+  </div>
+
+  <!-- 클리어 -->
+  <div id="clear" class="hidden">
+    <div class="clearCard">
+      <div class="clearGlow"></div>
+      <div class="clearIco">🔑</div>
+      <h2>지하실 해치 오픈!</h2>
+      <p>황금 열쇠로 잠긴 문을 열었어요.<br>가게의 진짜 비법이 잠들어 있던 지하실이 열렸습니다.</p>
+      <div class="clearBonus">영구 보너스 · 판매 수익 <b>+50%</b><br><small>무한 모드에서도 계속 적용됩니다</small></div>
+      <div class="clearStats">
+        <div><small>영업일</small><b id="clearDay">0</b></div>
+        <div><small>판매한 프라이</small><b id="clearFries">0</b></div>
+        <div><small>누적 수익</small><b id="clearMoney">0</b></div>
+      </div>
+      <button id="btnEndless">무한 모드 계속하기</button>
+    </div>
+  </div>
+
+  <!-- 시작 화면 -->
+  <div id="intro">
+    <div class="introCard">
+      <div class="logoRow">🍟 🥔 🍟</div>
+      <h1>프라이 <span>팩토리</span></h1>
+      <div class="subTitle">AUTO DEFENSE · 자동화 관전 디펜스</div>
+      <p class="sub">감자를 캐고, 껍질을 벗기고, 튀겨서 파는 가게.<br>당신은 <b>기계를 사서 자동화</b>하고, 밤의 변칙성을 견뎌냅니다.</p>
+      <div class="tiles">
+        <div class="tile"><span>🥔</span><b>채집</b><small>AI 점원</small></div>
+        <div class="tile"><span>🥣</span><b>탈피</b><small>자동 탈피기</small></div>
+        <div class="tile"><span>🍟</span><b>튀김</b><small>자동 튀김기</small></div>
+        <div class="tile"><span>🚗</span><b>서빙</b><small>드라이브스루</small></div>
+        <div class="tile"><span>👁️</span><b>방어</b><small>밤의 변칙성</small></div>
+      </div>
+      <button id="btnStart">가게 열기</button>
+      <div class="introFoot">
+        <span>🖱️ 드래그로 구경 · 휠로 줌</span>
+        <span>PC · 모바일 모두 가능</span>
+      </div>
+      <div class="introTip">캐릭터를 조작하지 않습니다. <b>돈이 모이면 아래 버튼</b>을 눌러 기계를 사면, 가게가 점점 혼자 돌아갑니다.<br><span class="credit">오마주: 로블록스 《프라이 판매! [변칙성]》</span></div>
+    </div>
+  </div>
+
+  <!-- 로딩 / 오류 -->
+  <div id="loading">
+    <div class="ldBox">
+      <div class="ldPan">🍟</div>
+      <div class="ldText">기름 예열 중…</div>
+      <div class="ldBar"><i></i></div>
+    </div>
+  </div>
+  <div id="err" class="hidden">
+    <div class="errBox">
+      <b>게임을 불러오지 못했어요</b>
+      <p>인터넷 연결을 확인한 뒤 새로고침해 주세요.<br>(3D 그래픽 라이브러리를 내려받는 중 문제가 생겼어요)</p>
+      <button onclick="location.reload()">새로고침</button>
+    </div>
+  </div>
+</div>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module" src="game.js"></script>
+<script src="../common/arcade.js" defer></script>
+</body>
+</html>
