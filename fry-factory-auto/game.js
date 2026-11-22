@@ -20,10 +20,14 @@ import {
 const $ = (id) => document.getElementById(id);
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 const lerp = (a, b, t) => a + (b - a) * t;
-const rnd = (a, b) => a + Math.random() * (b - a);
-const rr = (a, b) => rnd(a, b);
-const rndInt = (a, b) => Math.floor(a + Math.random() * (b - a + 1));
+// 인자 없이 부르면 0~1 난수 — 예전엔 인자를 빠뜨리면 NaN 이 되어 씬을 오염시켰다
+const rnd = (a = 0, b = 1) => a + Math.random() * (b - a);
+const rr = rnd;
+const rndInt = (a = 0, b = 1) => Math.floor(a + Math.random() * (b - a + 1));
 const pick = (a) => a[(Math.random() * a.length) | 0];
+// 유한값 보정 — NaN/Infinity 가 렌더러로 흘러들어가면 블룸이 화면 전체를 덮으므로 입구에서 막는다
+const fin = (v, f = 0) => (Number.isFinite(v) ? v : f);
+const finClamp = (v, a, b, f = a) => (Number.isFinite(v) ? clamp(v, a, b) : f);
 const fmt = (n) => Math.floor(n).toLocaleString('en-US');
 const fmtShort = (n) => {
   const v = Math.floor(n);
@@ -87,6 +91,7 @@ const S = {
   puckFx: { price: 1, custMul: 1, clerk: 1, extraNight: 0, nightMinus: 0 },
   custTimer: 3.0, nightEvt: [], nightX: 0, lastThreatKey: '',
   clusterT: 0, spawnIdx: 0,
+  ctxLost: false, ctxLostAt: 0, rebuilding: false, gfxErrT: 0,
 };
 
 let renderer, scene, camera, controls, W, SOFT = false, GPU_NAME = '';
@@ -96,6 +101,32 @@ const clock = new THREE.Clock();
 const V3 = (x, y, z) => new THREE.Vector3(x, y, z);
 const TMP = new THREE.Vector3();
 const pops = $('pops');
+
+/* ── GPU 자원 정리 ──────────────────────────────────────────────────────
+   장시간 플레이에서 차·감자·변칙성·프라이가 스폰/제거될 때마다 지오메트리와
+   머티리얼을 씬에서만 빼고 그대로 두면 GPU 버퍼가 무한히 쌓인다(하루 +200개).
+   제거 시 실제로 dispose 하고, 여러 곳에서 돌려쓰는 공용 자원(ffaShared)은
+   건드리지 않는다.                                                          */
+const TEX_SLOTS = ['map', 'alphaMap', 'aoMap', 'bumpMap', 'displacementMap', 'emissiveMap',
+  'envMap', 'lightMap', 'metalnessMap', 'normalMap', 'roughnessMap', 'specularMap', 'clearcoatMap'];
+const isShared = (a) => !!(a && a.userData && a.userData.ffaShared);
+function disposeTree(root) {
+  if (!root) return;
+  root.traverse((o) => {
+    const g = o.geometry;
+    if (g && !isShared(g)) g.dispose();
+    const mats = o.material ? (Array.isArray(o.material) ? o.material : [o.material]) : [];
+    for (const m of mats) {
+      if (!m || isShared(m)) continue;
+      for (const k of TEX_SLOTS) {
+        const t = m[k];
+        if (t && t.isTexture && !isShared(t)) t.dispose();
+      }
+      m.dispose();
+    }
+  });
+  if (root.parent) root.parent.remove(root);
+}
 
 /* ── 사운드 (Web Audio 합성 · 입체감 있는 효과음) ─────────────────────── */
 const SFX = {
@@ -245,6 +276,7 @@ function initThree() {
   const envScene = new RoomEnvironment();
   const envRT = pmrem.fromScene(envScene, 0.04);
   const envTex = envRT.texture;
+  envTex.userData.ffaShared = true;   // 공용 환경맵 — 절대 dispose 하지 않는다
   pmrem.dispose();
 
   controls = new OrbitControls(camera, canvas);
@@ -279,6 +311,263 @@ function initThree() {
   );
   composer.addPass(bloomPass);
   composer.addPass(new OutputPass());
+}
+
+/* ── 그래픽 복구 · 흰 화면 방어 ──────────────────────────────────────────
+   장시간 플레이에서 GPU 메모리 고갈/드라이버 문제로 WebGL 컨텍스트가 잃어버려도
+   DOM(HUD)은 멀쩡하고 3D 캔버스만 하얗게 죽은 채 남는다. 그 상태를 감지해
+   (1) 컨텍스트 복구 이벤트를 받아 재렌더, (2) 복구가 안 되면 캔버스·렌더러·월드를
+   새로 만들어 게임 상태를 유지한 채 되살린다.                                 */
+function bindCanvasLifecycle(cv) {
+  if (!cv) return;
+  cv.addEventListener('webglcontextlost', (e) => {
+    e.preventDefault();                 // 복구 의사 표시 — 브라우저가 restore 를 시도한다
+    S.ctxLost = true;
+    S.ctxLostAt = performance.now();
+    setGfxNotice('🎥 그래픽을 복구하는 중…');
+  }, false);
+  cv.addEventListener('webglcontextrestored', () => {
+    S.ctxLost = false;
+    S.ctxLostAt = 0;
+    S.gfxErrT = 0;
+    try {
+      if (composer && composer.reset) composer.reset();   // 렌더 타깃 재생성
+      renderer.shadowMap.needsUpdate = true;
+      if (scene) scene.traverse((o) => {
+        const mats = o.material ? (Array.isArray(o.material) ? o.material : [o.material]) : [];
+        mats.forEach((m) => { if (m) m.needsUpdate = true; });
+      });
+      renderFrame();
+    } catch (err) { /* 아래 감시 장치가 다시 시도한다 */ }
+    clearGfxNotice();
+    toast('🎥 화면을 복구했습니다', 2600);
+  }, false);
+}
+
+let _gfxNoticeT = 0;
+function setGfxNotice(msg) {
+  try {
+    const el = $('toast');
+    el.textContent = msg;
+    el.classList.remove('hidden');
+    el.classList.add('show');
+    clearTimeout(_gfxNoticeT);
+  } catch (e) {}
+}
+function clearGfxNotice() {
+  try {
+    const el = $('toast');
+    clearTimeout(_gfxNoticeT);
+    _gfxNoticeT = setTimeout(() => el.classList.remove('show'), 1200);
+  } catch (e) {}
+}
+
+// 씬 그래프와 게임 상태의 비유한 값을 안전한 값으로 되돌린다
+function sanitizeScene() {
+  if (!scene) return 0;
+  let fixed = 0;
+  const ok3 = (v) => Number.isFinite(v.x) && Number.isFinite(v.y) && Number.isFinite(v.z);
+  scene.traverse((o) => {
+    if (!ok3(o.position)) { o.position.set(0, 0, 0); fixed++; }
+    if (!ok3(o.scale)) { o.scale.set(1, 1, 1); fixed++; }
+    if (!ok3(o.rotation)) { o.rotation.set(0, 0, 0); fixed++; }
+    if (o.isLight && !Number.isFinite(o.intensity)) { o.intensity = 0; fixed++; }
+    const mats = o.material ? (Array.isArray(o.material) ? o.material : [o.material]) : [];
+    for (const m of mats) {
+      if (!m) continue;
+      if (m.color && !(Number.isFinite(m.color.r) && Number.isFinite(m.color.g) && Number.isFinite(m.color.b))) {
+        m.color.setRGB(0.8, 0.8, 0.8); fixed++;
+      }
+      if (m.emissive && !(Number.isFinite(m.emissive.r) && Number.isFinite(m.emissive.g) && Number.isFinite(m.emissive.b))) {
+        m.emissive.setRGB(0, 0, 0); fixed++;
+      }
+      if (m.opacity !== undefined && !Number.isFinite(m.opacity)) { m.opacity = 1; fixed++; }
+      // emissiveIntensity/roughness 는 해당 재질이 쓰는 경우에만 검사한다
+      if (m.emissive && !Number.isFinite(m.emissiveIntensity)) { m.emissiveIntensity = 1; fixed++; }
+      if (m.isMeshStandardMaterial && !Number.isFinite(m.roughness)) { m.roughness = 0.8; fixed++; }
+    }
+  });
+  // 카메라
+  if (camera) {
+    if (!ok3(camera.position)) { const d = defaultCam(); camera.position.copy(d.pos); fixed++; }
+    if (!Number.isFinite(camera.fov) || camera.fov <= 0) { camera.fov = defaultCam().fov; fixed++; }
+    camera.updateProjectionMatrix();
+  }
+  if (controls && !ok3(controls.target)) { const d = defaultCam(); controls.target.copy(d.target); fixed++; }
+  // 게임 수치
+  const safe = { money: 0, clock: 6, dayT: 0, nightT: 0, nightMix: 0, keyPct: 0, readyFries: 0, shutterHP: 100, speed: 4 };
+  for (const k of Object.keys(safe)) {
+    if (!Number.isFinite(S[k])) { S[k] = safe[k]; fixed++; }
+  }
+  if (!Number.isFinite(S.day) || S.day < 1) { S.day = 1; fixed++; }
+  if (!Number.isFinite(S.stats.earned)) S.stats.earned = 0;
+  for (const a of [...S.agents, ...S.robots]) {
+    if (!Number.isFinite(a.pos.x) || !Number.isFinite(a.pos.z)) {
+      a.pos.set ? a.pos.set(0, 0, 0) : (a.pos.x = 0, a.pos.z = 0); fixed++;
+    }
+  }
+  for (const c of S.customers) {
+    if (!Number.isFinite(c.x) || !Number.isFinite(c.z)) { c.x = L.spawn.car.x; c.z = L.spawn.car.z; fixed++; }
+  }
+  for (const p of (S.piles || [])) if (!Number.isFinite(p.stock)) { p.stock = 0; fixed++; }
+  return fixed;
+}
+
+// 캔버스 여러 지점이 완전 순백인지 검사 (블룸 폭주/NaN 지문)
+let _pxBuf = null;
+function frameIsWhite() {
+  try {
+    if (S.ctxLost || !renderer) return false;
+    const gl = renderer.getContext();
+    if (!gl || gl.isContextLost()) return false;
+    if (!_pxBuf) _pxBuf = new Uint8Array(4);
+    const w = gl.drawingBufferWidth, h = gl.drawingBufferHeight;
+    if (!w || !h) return false;
+    const pts = [[0.5, 0.5], [0.35, 0.6], [0.65, 0.4]];
+    for (const [ux, uy] of pts) {
+      gl.readPixels(Math.floor(w * ux), Math.floor(h * uy), 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, _pxBuf);
+      if (_pxBuf[0] < 250 || _pxBuf[1] < 250 || _pxBuf[2] < 250) return false;
+    }
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+let gfxLast = 0, gfxTick = 0, whiteStreak = 0;
+function graphicsWatchdog() {
+  const now = performance.now();
+  if (now - gfxLast < 1000) return;      // 벽시계 1초 간격 (프레임이 느려도 동작)
+  gfxLast = now;
+  gfxTick++;
+  if (S.rebuilding) return;
+  // 1) 컨텍스트 로스트 → 복구 이벤트를 기다리고, 안 오면 직접 재구성
+  if (S.ctxLost) {
+    if (S.ctxLostAt && now - S.ctxLostAt > 7000) rebuildGraphics('context-lost');
+    return;
+  }
+  // 2) 흰 화면 감시 (2초 간격)
+  if (gfxTick % 2 !== 0) return;
+  if (!frameIsWhite()) { whiteStreak = 0; return; }
+  whiteStreak++;
+  if (whiteStreak === 2) {
+    const fixed = sanitizeScene();
+    if (composer && composer.reset) { try { composer.reset(); } catch (e) {} }
+    renderer.shadowMap.needsUpdate = true;
+    if (window.console) console.warn('[fry-factory] 흰 화면 감지 — 씬 정화', fixed);
+  } else if (whiteStreak >= 4) {
+    if (window.console) console.warn('[fry-factory] 흰 화면 지속 — 그래픽 파이프라인 재구성');
+    whiteStreak = 0;
+    rebuildGraphics('white-screen');
+  }
+}
+
+// 렌더 파이프라인 + 월드를 새로 만들어 게임 상태를 유지한 채 되살린다
+function rebuildGraphics(reason) {
+  if (S.rebuilding) return false;
+  S.rebuilding = true;
+  if (window.console) console.warn('[fry-factory] 그래픽 재구성:', reason);
+  try {
+    const camP = camera ? camera.position.clone() : null;
+    const camT = controls ? controls.target.clone() : null;
+    const camF = camera ? camera.fov : 0;
+    const robots = S.robots.length;
+    const brokenIds = S.robots.filter((r) => r.broken).map((r) => r.id);
+    const agentPos = S.agents.map((a) => ({ id: a.id, x: a.pos.x, z: a.pos.z, face: a.face }));
+
+    // 동적 오브젝트 정리
+    S.customers.forEach((c) => { disposeTree(c.mesh); disposeTree(c.shadow); });
+    S.customers.length = 0;
+    S.beltItems.forEach((b) => disposeTree(b.mesh));
+    S.beltItems.length = 0;
+    S.anomalies.forEach((an) => removeAnomaly(an));
+    S.anomalies.length = 0;
+    S.shots.forEach((s) => disposeTree(s.mesh));
+    S.shots.length = 0;
+    parts.length = 0;
+    coinFx.length = 0;
+    popIns.length = 0;
+    S.agents.length = 0;
+    S.robots.length = 0;
+    S.blackout = false;
+
+    // 이전 월드 GPU 자원 회수 (공용 자산은 표시가 있어 건너뛴다)
+    //  컨텍스트를 잃은 상태면 GPU 자원은 이미 사라졌으므로 건너뛴다
+    if (scene && !S.ctxLost) { disposeTree(scene); }
+    if (scene) scene.clear();
+    if (composer) { try { composer.dispose && composer.dispose(); } catch (e) {} }
+    composer = null; bloomPass = null;
+    if (renderer) { try { renderer.dispose(); } catch (e) {} }
+    renderer = null;
+
+    // 새 캔버스 (죽은 컨텍스트는 재사용할 수 없다)
+    const old = $('gl');
+    const cv = document.createElement('canvas');
+    cv.id = 'gl';
+    if (old && old.getAttribute) cv.setAttribute('aria-label', old.getAttribute('aria-label') || '');
+    if (old && old.parentNode) old.parentNode.replaceChild(cv, old);
+    else $('wrap').appendChild(cv);
+
+    initThree();                    // renderer · scene · camera · controls · W · composer
+    bindCanvasLifecycle(cv);
+    if (camP && camT) {
+      camera.position.copy(camP);
+      controls.target.copy(camT);
+      if (camF) { camera.fov = camF; camera.updateProjectionMatrix(); }
+      controls.update();
+    }
+
+    // 월드에 딸린 것들 재생성
+    initPiles(true);                // true = 재고 유지
+    initLabels();
+    createTrayBoxes();
+    const c0 = spawnClerk(0), c1 = spawnClerk(1);
+    agentPos.forEach((p) => {
+      const a = [c0, c1].find((x) => x.id === p.id);
+      if (!a) return;
+      if (Number.isFinite(p.x) && Number.isFinite(p.z)) { a.pos.set(p.x, 0, p.z); a.mesh.position.copy(a.pos); }
+      if (Number.isFinite(p.face)) { a.face = p.face; a.mesh.rotation.y = p.face; }
+    });
+    for (let i = 0; i < robots; i++) {
+      const r = spawnRobot();
+      if (brokenIds.includes(r.id)) r.broken = true;
+    }
+    restoreUpgradeVisuals();
+    S.ctxLost = false;
+    S.ctxLostAt = 0;
+    labelCache.peel = labelCache.fry = labelCache.ready = null;
+    renderer.shadowMap.needsUpdate = true;
+    renderFrame();
+    S.rebuilding = false;
+    toast('🎥 화면을 복구했습니다', 2600);
+    return true;
+  } catch (err) {
+    S.rebuilding = false;
+    if (window.console) console.warn('[fry-factory] 그래픽 재구성 실패', err);
+    try { showGfxFatal(); } catch (e) {}
+    return false;
+  }
+}
+
+function showGfxFatal() {
+  const el = $('err');
+  if (!el) return;
+  el.classList.remove('hidden');
+  el.innerHTML = '<div class="errBox"><b>그래픽을 되살리는 데 실패했어요</b><p>새로고침하면 다시 플레이할 수 있습니다.</p><button onclick="location.reload()">새로고침</button></div>';
+}
+
+// 업그레이드로 바뀐 월드 비주얼을 애니메이션 없이 되맞춘다
+function restoreUpgradeVisuals() {
+  if (!W || !W.refs) return;
+  const R = W.refs;
+  if (R.beltTarp) R.beltTarp.visible = !S.up.belt;
+  if (R.beltGrp) R.beltGrp.visible = true;
+  if (R.beltSlats) R.beltSlats.forEach((m) => { m.visible = !!S.up.belt; });
+  if (R.peelerManual) R.peelerManual.visible = !S.up.peeler;
+  if (R.peelerAuto) R.peelerAuto.visible = !!S.up.peeler;
+  if (R.vats && S.up.autoFry) R.vats.forEach((v) => { v.material.emissiveIntensity = 0.55; });
+  if (R.turret) R.turret.visible = !!S.up.shooter;
+  if (S.keyFound && R.padlock) R.padlock.visible = false;
 }
 
 function focusCam(pos, target, dur = 1.0) {
@@ -318,6 +607,7 @@ function blobTex() {
   g.fillStyle = grd; g.fillRect(0, 0, 128, 128);
   _blobTex = new THREE.CanvasTexture(cv);
   _blobTex.colorSpace = THREE.SRGBColorSpace;
+  _blobTex.userData.ffaShared = true;
   return _blobTex;
 }
 const blobMat = () => new THREE.MeshBasicMaterial({
@@ -407,6 +697,8 @@ function initLabels() {
 }
 const labelCache = {};
 function setLabel(key, el, text) {
+  if (!el || !el.userData.setText) return;
+  if (typeof text === 'string' && text.indexOf('NaN') >= 0) return;   // 비유한 수치가 라벨 텍스처로 새지 않게
   if (labelCache[key] === text) return;
   labelCache[key] = text;
   el.userData.setText(text);
@@ -476,7 +768,7 @@ function updateCustomers(dt) {
       c.mesh.position.z = c.z;
       if (c.shadow) { c.shadow.position.set(c.x, 0.03, c.z); c.shadow.material.opacity = 0.55 * clamp(1 - (c.z - 5) / 26, 0, 1); }
       if (c.kind === 'car') c.mesh.position.x = lerp(c.mesh.position.x, L.carStop.x + 0.2, dt * 2);
-      if (c.z > 30) { scene.remove(c.mesh); if (c.shadow) scene.remove(c.shadow); S.customers.splice(i, 1); }
+      if (c.z > 30) { disposeTree(c.mesh); disposeTree(c.shadow); S.customers.splice(i, 1); }
       continue;
     }
     if (c.state === 'arrive') {
@@ -534,9 +826,9 @@ function addMoney(n, at, label) {
   el.classList.add('flash');
 }
 function pop(x, y, z, text, cls) {
-  if (!camera) return;
+  if (!camera || !Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) return;
   TMP.set(x, y, z).project(camera);
-  if (TMP.z > 1 || TMP.z < -1) return;
+  if (!Number.isFinite(TMP.x) || !Number.isFinite(TMP.y) || TMP.z > 1 || TMP.z < -1) return;
   const el = document.createElement('div');
   el.className = 'pop ' + (cls || '');
   el.textContent = text;
@@ -567,9 +859,18 @@ function banner(main, sub, ms = 2400) {
 }
 
 /* ── 파티클 ───────────────────────────────────────────────────────────── */
+const shotGeo = new THREE.BoxGeometry(0.1, 0.34, 0.1);
+shotGeo.userData.ffaShared = true;
+const shotMat = new THREE.MeshStandardMaterial({ color: 0xffd35c, roughness: 0.7 });
+shotMat.userData.ffaShared = true;
 const parts = [];
 const partGeo = new THREE.SphereGeometry(0.045, 5, 4);
+partGeo.userData.ffaShared = true;
 function burst(x, y, z, color, n = 6, power = 2.2, size = 1) {
+  if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) return;   // NaN 원천 차단
+  const room = 240 - parts.length;
+  if (room <= 0) return;
+  n = Math.min(n, room);
   for (let i = 0; i < n; i++) {
     const m = new THREE.Mesh(partGeo, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 1 }));
     m.position.set(x, y, z);
@@ -597,13 +898,21 @@ function updateParts(dt) {
 /* ── 생산 라인 ────────────────────────────────────────────────────────── */
 function pileRef(type) { return S.piles.find((p) => p.key === type); }
 
-function initPiles() {
-  S.piles = W.refs.piles.map((p) => Object.assign(p, {
-    stock: p.key === 'normal' ? 260 : p.key === 'gold' ? 16 : 9,
-    max: p.key === 'normal' ? 260 : p.key === 'gold' ? 16 : 9,
-    regen: p.key === 'normal' ? 1.1 : p.key === 'gold' ? 0.09 : 0.035,
-    acc: 0,
-  }));
+function initPiles(keep) {
+  const old = keep && S.piles ? S.piles.reduce((m, p) => (m[p.key] = p, m), {}) : null;
+  S.piles = W.refs.piles.map((p) => {
+    const o = Object.assign(p, {
+      stock: p.key === 'normal' ? 260 : p.key === 'gold' ? 16 : 9,
+      max: p.key === 'normal' ? 260 : p.key === 'gold' ? 16 : 9,
+      regen: p.key === 'normal' ? 1.1 : p.key === 'gold' ? 0.09 : 0.035,
+      acc: 0,
+    });
+    if (old && old[p.key] && Number.isFinite(old[p.key].stock)) {
+      o.stock = clamp(old[p.key].stock, 0, o.max);
+      o.acc = fin(old[p.key].acc, 0);
+    }
+    return o;
+  });
 }
 
 function updatePiles(dt) {
@@ -665,7 +974,7 @@ function updateBelt(dt) {
     if (it.z <= B.z1 + 0.35) {
       if (S.peel.length < 14) {
         S.peel.push(it.type);
-        scene.remove(it.mesh);
+        disposeTree(it.mesh);
         S.beltItems.splice(i, 1);
         burst(B.x, B.y + 0.2, B.z1 + 0.3, 0xd8b078, 1, 0.8, 0.5);
       } else {
@@ -757,7 +1066,8 @@ function updateProduction(dt) {
 
 /* ── 서빙 ─────────────────────────────────────────────────────────────── */
 function unitPrice() {
-  return BASE_PRICE * Math.pow(1.5, S.up.price) * (1 + 0.10 * (S.day - 1)) * S.puckFx.price * (1 + S.perm);
+  const p = BASE_PRICE * Math.pow(1.5, S.up.price) * (1 + 0.10 * (S.day - 1)) * S.puckFx.price * (1 + S.perm);
+  return Number.isFinite(p) && p > 0 ? Math.min(p, 1e9) : BASE_PRICE;
 }
 
 function serveCustomer(c, n) {
@@ -1288,7 +1598,7 @@ function startDay() {
   // 잔여 변칙성 제거
   S.anomalies.forEach((a) => removeAnomaly(a));
   S.anomalies.length = 0;
-  S.beltItems.forEach((b) => scene.remove(b.mesh));
+  S.beltItems.forEach((b) => disposeTree(b.mesh));
   S.beltItems.length = 0;
   banner('DAY ' + S.day, '아침이 밝았습니다 · 자동화를 이어가세요', 2400);
   toast('🌅 밤을 무사히 넘겼습니다. 수리비 +$' + fmt(60 + S.day * 25) + ' 지급', 3200);
@@ -1320,6 +1630,7 @@ function makeGlowSprite(color, size, opacity) {
     g.fillStyle = grd; g.fillRect(0, 0, 64, 64);
     tex = new THREE.CanvasTexture(cv);
     tex.colorSpace = THREE.SRGBColorSpace;
+    tex.userData.ffaShared = true;
     glowTexCache[key] = tex;
   }
   const mat = new THREE.SpriteMaterial({
@@ -1389,12 +1700,12 @@ function spawnAnomaly(type) {
     const bodyMat2 = new THREE.MeshStandardMaterial({ color: 0x6f4522, roughness: 0.92, emissive: 0x1c0c04, emissiveIntensity: 0.5 });
     const body = new THREE.Mesh(new THREE.SphereGeometry(0.95, 20, 16), bodyMat);
     body.scale.set(1.2, 1.02, 1.06); body.position.y = 1.0; body.castShadow = true; g.add(body);
-    // 울퉁불퉁 혹
+    // 울퉁불퉁 혹 — 인자 없는 rnd() 를 쓰면 NaN 이 되어 변환행렬·블룸이 오염된다
     for (let i = 0; i < 9; i++) {
-      const a = rnd() * Math.PI * 2, b = rnd() * Math.PI;
-      const lump = new THREE.Mesh(new THREE.IcosahedronGeometry(rr(0.14, 0.28), 0), bodyMat2);
+      const a = rnd(0, Math.PI * 2), b = rnd(0, Math.PI);
+      const lump = new THREE.Mesh(new THREE.IcosahedronGeometry(finClamp(rr(0.14, 0.28), 0.1, 0.3, 0.2), 0), bodyMat2);
       lump.position.set(Math.sin(b) * Math.cos(a) * 0.9, 1.0 + Math.cos(b) * 0.85, Math.sin(b) * Math.sin(a) * 0.85);
-      lump.rotation.set(rnd() * 3, rnd() * 3, rnd() * 3);
+      lump.rotation.set(rnd(0, 3), rnd(0, 3), rnd(0, 3));
       lump.castShadow = true; g.add(lump);
     }
     for (const sx of [-1, 1]) {
@@ -1544,7 +1855,7 @@ function resolveAnomaly(an, how) {
 }
 
 function removeAnomaly(an) {
-  if (an.mesh) { scene.remove(an.mesh); an.mesh = null; }
+  if (an.mesh) { disposeTree(an.mesh); an.mesh = null; }
 }
 
 function updateAnomalies(dt) {
@@ -1666,11 +1977,12 @@ function damageShutter(n, at) {
 }
 
 function spawnShot(from, to, onHit, opt = {}) {
+  if (!from || !to) return;
+  if (![from.x, from.y, from.z, to.x, to.y, to.z].every(Number.isFinite)) return;   // NaN 발사체 차단
   const g = new THREE.Group();
-  const n = opt.n || 1;
+  const n = Math.max(1, Math.min(4, Math.floor(fin(opt.n, 1))));
   for (let i = 0; i < n; i++) {
-    const f = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.34, 0.1),
-      new THREE.MeshStandardMaterial({ color: 0xffd35c, roughness: 0.7 }));
+    const f = new THREE.Mesh(shotGeo, shotMat);
     f.position.set(rnd(-0.07, 0.07), rnd(-0.05, 0.05), rnd(-0.07, 0.07));
     f.rotation.set(rnd(0, 1), rnd(0, 1), rnd(0, 1));
     g.add(f);
@@ -1679,7 +1991,7 @@ function spawnShot(from, to, onHit, opt = {}) {
   scene.add(g);
   S.shots.push({
     mesh: g, from: from.clone(), to: to.clone(), t: 0,
-    dur: opt.dur || 0.42, arc: opt.arc === undefined ? 1.0 : opt.arc, onHit,
+    dur: Math.max(0.12, fin(opt.dur, 0.42)), arc: fin(opt.arc, 1.0), onHit,
   });
   SFX.shoot();
 }
@@ -1693,7 +2005,7 @@ function updateShots(dt) {
     s.mesh.position.y += Math.sin(k * Math.PI) * s.arc;
     s.mesh.rotation.x += dt * 9;
     if (k >= 1) {
-      scene.remove(s.mesh);
+      disposeTree(s.mesh);
       S.shots.splice(i, 1);
       burst(s.to.x, s.to.y, s.to.z, 0xffcf4d, 4, 1.4, 0.7);
       if (s.onHit) s.onHit();
@@ -1813,7 +2125,8 @@ function closePuck() {
 const upEls = {};
 function upCost(u) {
   const lv = S.up[u.id] || 0;
-  return u.cost ? Math.round(u.cost * Math.pow(u.grow || 1, lv)) : 0;
+  const c = u.cost ? Math.round(u.cost * Math.pow(u.grow || 1, lv)) : 0;
+  return Number.isFinite(c) ? c : 0;
 }
 function upLocked(u) { return u.dep.some((d) => !S.up[d]); }
 
@@ -1971,10 +2284,12 @@ function refreshUpsThrottle() {
 
 /* ── 3D 코인 · 업그레이드 팝인 ─────────────────────────────────────────── */
 const coinGeo = new THREE.CylinderGeometry(0.15, 0.15, 0.035, 18);
+coinGeo.userData.ffaShared = true;
 const coinMat = new THREE.MeshStandardMaterial({
   color: 0xffcf3d, metalness: 0.95, roughness: 0.2, emissive: 0x5a3a00,
   emissiveIntensity: 0.4, envMapIntensity: 1.6,
 });
+coinMat.userData.ffaShared = true;
 const coinFx = [];
 function coin3D(x, y, z) {
   if (coinFx.length > 16) return;
@@ -2188,6 +2503,7 @@ function loop() {
   controls.update();
   renderer.info.reset();
   renderFrame();
+  graphicsWatchdog();   // 컨텍스트 로스트 · 흰 화면 감시 및 자동 복구
 }
 
 /* ── UI 이벤트 ────────────────────────────────────────────────────────── */
@@ -2247,21 +2563,12 @@ function showErr(msg) {
 /* ── 초기화 ───────────────────────────────────────────────────────────── */
 function init() {
   initThree();
+  bindCanvasLifecycle($('gl'));
   initPiles();
   initLabels();
   spawnClerk(0);
   spawnClerk(1);
-
-  // 대기 트레이에 프라이 상자 배치
-  S.trayBoxes = [];
-  for (let i = 0; i < 8; i++) {
-    const b = makeFryBox();
-    b.position.set((i % 4) * 0.32 - 0.48, 0.98 + Math.floor(i / 4) * 0.3, (Math.floor(i / 4) % 2) * 0.18 - 0.09);
-    b.scale.setScalar(0.8);
-    b.visible = false;
-    W.refs.trayStack.add(b);
-    S.trayBoxes.push(b);
-  }
+  createTrayBoxes();
 
   buildUps();
   bindUI();
@@ -2271,6 +2578,21 @@ function init() {
   $('loading').classList.add('hidden');
   S.ready = true;
   requestAnimationFrame(loop);
+}
+
+// 대기 트레이에 프라이 상자 배치 (복구 시에도 재사용)
+function createTrayBoxes() {
+  if (S.trayBoxes) S.trayBoxes.forEach((b) => disposeTree(b));
+  S.trayBoxes = [];
+  if (!W || !W.refs.trayStack) return;
+  for (let i = 0; i < 8; i++) {
+    const b = makeFryBox();
+    b.position.set((i % 4) * 0.32 - 0.48, 0.98 + Math.floor(i / 4) * 0.3, (Math.floor(i / 4) % 2) * 0.18 - 0.09);
+    b.scale.setScalar(0.8);
+    b.visible = false;
+    W.refs.trayStack.add(b);
+    S.trayBoxes.push(b);
+  }
 }
 
 /* ── 디버그 / 검증 API ────────────────────────────────────────────────── */
@@ -2365,10 +2687,11 @@ window.__FFA = {
     chooseCard(i) { chooseCard(i); },
     closePuck,
     closeClear,
-    simulate(sec) {
-      const step = 1 / 30;
+    simulate(sec, stepArg) {
+      const step = Number.isFinite(stepArg) && stepArg > 0 ? stepArg : 1 / 30;
       for (let t = 0; t < sec; t += step) {
         if (S.puck.open) chooseCard(0);
+        if (S.clearOpen) closeClear();
         tick(step);
         if (!S.started) break;
       }
