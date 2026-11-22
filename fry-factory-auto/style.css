@@ -339,6 +339,8 @@ body{
 @media (max-width:560px){
   #top{left:8px;right:8px;top:calc(48px + env(safe-area-inset-top));}
   #nightbar{top:calc(94px + env(safe-area-inset-top));}
+  /* 밤 상태 패널과 겹치지 않게 배너는 아래쪽에 (JS가 패널 높이에 맞춰 더 내린다) */
+  #banner{top:38%;max-width:92vw;}
   .chip .cl{display:none;}
   .chip.clock .cl{display:inline;font-size:9.5px;}
   #upHead .uhKey{display:flex;}

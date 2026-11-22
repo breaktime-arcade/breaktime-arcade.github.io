@@ -1782,6 +1782,11 @@ export function buildWorld(_t, scene, opt = {}) {
     sun.color.copy(_c1.copy(DAY.sun).multiplyScalar(dayW).add(_c2.copy(DUSK.sun).multiplyScalar(duskW)).add(_c3.copy(NIGHT.sun).multiplyScalar(nightW * 0.4)));
     hemi.intensity = (DAY.hemi * dayW + DUSK.hemi * duskW + NIGHT.hemi * nightW) * (1 - dim * 0.8);
     amb.intensity = (DAY.amb * dayW + DUSK.amb * duskW + NIGHT.amb * nightW) * (1 - dim * 0.7);
+    // 최소 조명 — 새벽·정전(백그라운드 복귀 포함)에서도 지면·건물 윤곽은 남긴다
+    const floorK = 1 - dim * 0.45;
+    hemi.intensity = Math.max(hemi.intensity, (0.12 + 0.05 * nightW) * floorK);
+    amb.intensity = Math.max(amb.intensity, (0.07 + 0.05 * nightW) * floorK);
+    moonLight.intensity = Math.max(moonLight.intensity, 0.34 * nightW * floorK);
     fill.intensity = (2.0 * dayW + 1.8 * duskW + 1.3 * nightW) * (1 - dim * 0.85);
     shopLights.forEach((l) => { l.intensity = (6.5 * dayW + 9 * duskW + 11 * nightW) * (1 - dim * 0.95); });
     lampLights.forEach((o) => {

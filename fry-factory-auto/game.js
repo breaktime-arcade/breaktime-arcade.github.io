@@ -95,6 +95,7 @@ const S = {
 };
 
 let renderer, scene, camera, controls, W, SOFT = false, GPU_NAME = '';
+let _gpuProbed = false;
 let composer = null, bloomPass = null;
 let camAnim = null, resizeTimer = 0;
 const clock = new THREE.Clock();
@@ -112,19 +113,24 @@ const TEX_SLOTS = ['map', 'alphaMap', 'aoMap', 'bumpMap', 'displacementMap', 'em
 const isShared = (a) => !!(a && a.userData && a.userData.ffaShared);
 function disposeTree(root) {
   if (!root) return;
-  root.traverse((o) => {
-    const g = o.geometry;
-    if (g && !isShared(g)) g.dispose();
-    const mats = o.material ? (Array.isArray(o.material) ? o.material : [o.material]) : [];
-    for (const m of mats) {
-      if (!m || isShared(m)) continue;
-      for (const k of TEX_SLOTS) {
-        const t = m[k];
-        if (t && t.isTexture && !isShared(t)) t.dispose();
+  // 컨텍스트를 잃은 뒤에는 GPU 자원이 이미 사라져 있다. 삭제를 시도하면
+  // 다른 컨텍스트의 객체를 지우려다 GL 경고만 쏟아지므로 씬에서만 뗀다.
+  const lost = !!S.ctxLost;
+  if (!lost) {
+    root.traverse((o) => {
+      const g = o.geometry;
+      if (g && !isShared(g)) g.dispose();
+      const mats = o.material ? (Array.isArray(o.material) ? o.material : [o.material]) : [];
+      for (const m of mats) {
+        if (!m || isShared(m)) continue;
+        for (const k of TEX_SLOTS) {
+          const t = m[k];
+          if (t && t.isTexture && !isShared(t)) t.dispose();
+        }
+        m.dispose();
       }
-      m.dispose();
-    }
-  });
+    });
+  }
   if (root.parent) root.parent.remove(root);
 }
 
@@ -250,10 +256,15 @@ function defaultCam() {
 
 function initThree() {
   const canvas = $('gl');
-  const probe = document.createElement('canvas').getContext('webgl2');
-  const dbgInfo = probe && probe.getExtension('WEBGL_debug_renderer_info');
-  GPU_NAME = dbgInfo ? String(probe.getParameter(dbgInfo.UNMASKED_RENDERER_WEBGL)) : '';
-  SOFT = /SwiftShader|llvmpipe|Software|ANGLE \(Google/i.test(GPU_NAME);
+  if (!_gpuProbed) {
+    const probe = document.createElement('canvas').getContext('webgl2');
+    const dbgInfo = probe && probe.getExtension('WEBGL_debug_renderer_info');
+    GPU_NAME = dbgInfo ? String(probe.getParameter(dbgInfo.UNMASKED_RENDERER_WEBGL)) : '';
+    SOFT = /SwiftShader|llvmpipe|Software|ANGLE \(Google/i.test(GPU_NAME);
+    // 프로브용 컨텍스트를 돌려준다 — 재구성이 반복되면 브라우저 컨텍스트 한도에 걸린다
+    try { const lc = probe && probe.getExtension('WEBGL_lose_context'); if (lc) lc.loseContext(); } catch (e) {}
+    _gpuProbed = true;
+  }
   renderer = new THREE.WebGLRenderer({ canvas, antialias: !SOFT, powerPreference: 'high-performance', stencil: false });
   renderer.setPixelRatio(SOFT ? 1 : Math.min(window.devicePixelRatio || 1, 1.6));
   renderer.setSize(window.innerWidth, window.innerHeight);
@@ -330,18 +341,80 @@ function bindCanvasLifecycle(cv) {
     S.ctxLost = false;
     S.ctxLostAt = 0;
     S.gfxErrT = 0;
-    try {
-      if (composer && composer.reset) composer.reset();   // 렌더 타깃 재생성
-      renderer.shadowMap.needsUpdate = true;
-      if (scene) scene.traverse((o) => {
-        const mats = o.material ? (Array.isArray(o.material) ? o.material : [o.material]) : [];
-        mats.forEach((m) => { if (m) m.needsUpdate = true; });
-      });
-      renderFrame();
-    } catch (err) { /* 아래 감시 장치가 다시 시도한다 */ }
-    clearGfxNotice();
-    toast('🎥 화면을 복구했습니다', 2600);
+    // 부분 초기화(composer.reset + needsUpdate)로는 못 살린다:
+    //  - PMREM 으로 만든 환경맵(envTex)은 이미지가 없는 렌더타깃 텍스처라
+    //    컨텍스트를 잃은 뒤 다시 올릴 수 없어 금속·텍스처 표면이 검게 남고,
+    //  - 섀도우맵·후처리 렌더타깃도 새 컨텍스트에서 다시 만들어야 한다.
+    // 그래서 복구 이벤트를 받으면 렌더러·씬·월드·후처리를 통째로 새로 만든다.
+    setTimeout(() => {
+      if (S.rebuilding) return;
+      if (performance.now() - _lastRebuildEnd < 2000) return;   // 방금 재구성했으면 건너뛴다
+      clearGfxNotice();
+      rebuildGraphics('context-restored');
+    }, 0);
   }, false);
+}
+
+/* ── 백그라운드 복귀 ────────────────────────────────────────────────────
+   모바일에서 탭을 오래 내려놓으면 GPU 컨텍스트가 소리 없이 사라지고,
+   복귀 후 webglcontextlost/restored 이벤트가 오지 않은 채 캔버스만 새까맣게
+   남는 경우가 있다. 복귀 시점에 컨텍스트를 직접 확인해 잃어버렸으면 그래픽을
+   새로 만들고, 아니면 시간 점프를 지운 뒤 즉시 한 프레임 그려 화면을 살린다. */
+let _lastResume = 0, _resumeDarkAt = 0, _lastRebuildEnd = 0;
+function dawnFactor() {
+  if (S.phase === 'night') return clamp((S.clock - 27.7) / 2.3, 0, 1);
+  return clamp(1 - (S.clock - 6) / 1.1, 0, 1) * 0.9;
+}
+
+function onPageResume(reason) {
+  const now = performance.now();
+  if (now - _lastResume < 800) return;      // visibilitychange·focus 중복 호출 방지
+  _lastResume = now;
+  try { clock.getDelta(); } catch (e) {}    // 백그라운드 공백을 시뮬레이션에 넣지 않는다
+  if (!renderer || !camera) return;
+  // 주소창·회전으로 화면 크기가 바뀐 채 돌아온 경우 캔버스부터 맞춘다
+  const cv = $('gl');
+  if (cv && (Math.abs(cv.clientWidth - innerWidth) > 1 || Math.abs(cv.clientHeight - innerHeight) > 1)) {
+    try { applyViewport(); } catch (e) {}
+  }
+  const gl = renderer.getContext ? renderer.getContext() : null;
+  if (!gl || gl.isContextLost()) {
+    S.ctxLost = true;
+    S.ctxLostAt = now;
+    setGfxNotice('🎥 그래픽을 복구하는 중…');
+    if (window.console) console.warn('[fry-factory] 복귀 시 컨텍스트 손실 — 재구성:', reason);
+    if (now - _lastRebuildEnd > 1500) rebuildGraphics('resume-lost');
+    return;
+  }
+  try {
+    if (W) W.setNight(S.nightMix, S.blackout ? 1 : 0, dawnFactor());
+    renderer.shadowMap.needsUpdate = true;
+    renderFrame();
+    renderFrame();
+    // 복귀 직후 프레임이 통째로 검으면 기다리지 말고 바로 재구성한다
+    // (오래 멈춘 뒤 렌더타깃·텍스처가 무효화된 경우)
+    const lum = sampleCanvasLum([[0.5, 0.55], [0.38, 0.5], [0.62, 0.62], [0.5, 0.86]]);
+    if (lum && Math.max.apply(null, lum) < 9 && sceneShouldBeVisible()) {
+      if (window.console) console.warn('[fry-factory] 복귀 화면이 검음 — 즉시 재구성:', reason);
+      rebuildGraphics('resume-black');
+      return;
+    }
+  } catch (e) { /* 아래 감시 장치가 다시 시도한다 */ }
+  _resumeDarkAt = now + 4000;              // 복귀 직후 검은 화면은 더 엄격하게 본다
+}
+
+function bindLifecycleEvents() {
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) onPageResume('visibility');
+  });
+  window.addEventListener('pageshow', (e) => { if (e.persisted) onPageResume('pageshow'); });
+  window.addEventListener('focus', () => { if (!document.hidden) onPageResume('focus'); });
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(applyViewport, 120);
+    });
+  }
 }
 
 let _gfxNoticeT = 0;
@@ -413,52 +486,104 @@ function sanitizeScene() {
   return fixed;
 }
 
-// 캔버스 여러 지점이 완전 순백인지 검사 (블룸 폭주/NaN 지문)
-let _pxBuf = null;
-function frameIsWhite() {
+// 캔버스 픽셀 계측 — 구현체가 허용하는 readPixels 포맷을 먼저 물어본다.
+// (모바일 크롬의 display-p3 캔버스처럼 RGBA/UNSIGNED_BYTE 읽기가 거부되면
+//  흰 화면·검은 화면 감시가 통째로 무력해진다)
+let _pxBuf = null, _pxFmt = 0, _pxType = 0, _pxProbeBroken = false;
+function initPixelProbe(gl) {
+  if (_pxFmt) return true;
   try {
-    if (S.ctxLost || !renderer) return false;
-    const gl = renderer.getContext();
-    if (!gl || gl.isContextLost()) return false;
-    if (!_pxBuf) _pxBuf = new Uint8Array(4);
-    const w = gl.drawingBufferWidth, h = gl.drawingBufferHeight;
-    if (!w || !h) return false;
-    const pts = [[0.5, 0.5], [0.35, 0.6], [0.65, 0.4]];
-    for (const [ux, uy] of pts) {
-      gl.readPixels(Math.floor(w * ux), Math.floor(h * uy), 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, _pxBuf);
-      if (_pxBuf[0] < 250 || _pxBuf[1] < 250 || _pxBuf[2] < 250) return false;
-    }
+    _pxFmt = gl.getParameter(gl.IMPLEMENTATION_COLOR_READ_FORMAT) || gl.RGBA;
+    _pxType = gl.getParameter(gl.IMPLEMENTATION_COLOR_READ_TYPE) || gl.UNSIGNED_BYTE;
+    _pxBuf = (_pxType === gl.FLOAT) ? new Float32Array(4) : new Uint8Array(4);
     return true;
+  } catch (e) { _pxProbeBroken = true; return false; }
+}
+
+// 지정한 UV 지점들의 휘도(0~255)를 반환. 읽을 수 없으면 null
+function sampleCanvasLum(pts) {
+  if (_pxProbeBroken || S.ctxLost || !renderer) return null;
+  try {
+    const gl = renderer.getContext();
+    if (!gl || gl.isContextLost()) return null;
+    if (!initPixelProbe(gl)) return null;
+    const w = gl.drawingBufferWidth, h = gl.drawingBufferHeight;
+    if (!w || !h) return null;
+    const scale = (_pxType === gl.FLOAT) ? 255 : 1;
+    const out = [];
+    for (const [ux, uy] of pts) {
+      gl.readPixels(Math.floor(w * ux), Math.floor(h * uy), 1, 1, _pxFmt, _pxType, _pxBuf);
+      if (gl.getError() !== gl.NO_ERROR) { _pxProbeBroken = true; return null; }
+      out.push((_pxBuf[0] * 0.2126 + _pxBuf[1] * 0.7152 + _pxBuf[2] * 0.0722) * scale);
+    }
+    return out;
   } catch (e) {
-    return false;
+    return null;
   }
 }
 
-let gfxLast = 0, gfxTick = 0, whiteStreak = 0;
+// 지금 상태라면 화면이 밝아야 하는가 (정상적인 밤·정전 연출과 구분한다)
+function sceneShouldBeVisible() {
+  if (!W || !W.refs || !W.refs.hemi) return false;
+  if (S.blackout) return false;                                         // 정전 연출은 정상적으로 어둡다
+  const hemi = W.refs.hemi.intensity, amb = W.refs.amb.intensity;
+  const moon = W.refs.moonLight ? W.refs.moonLight.intensity : 0;
+  if (S.phase === 'day') return true;
+  return (hemi + amb) > 0.12 || moon > 0.3;
+}
+
+let gfxLast = 0, gfxTick = 0, whiteStreak = 0, darkStreak = 0;
+let _lastLum = null;
 function graphicsWatchdog() {
   const now = performance.now();
   if (now - gfxLast < 1000) return;      // 벽시계 1초 간격 (프레임이 느려도 동작)
   gfxLast = now;
   gfxTick++;
   if (S.rebuilding) return;
-  // 1) 컨텍스트 로스트 → 복구 이벤트를 기다리고, 안 오면 직접 재구성
+  // 1) 컨텍스트 상태 — 이벤트를 놓친 배경 복귀도 여기서 잡는다
+  const glNow = renderer && renderer.getContext ? renderer.getContext() : null;
+  if (glNow && glNow.isContextLost() && !S.ctxLost) {
+    S.ctxLost = true;
+    S.ctxLostAt = now;
+    setGfxNotice('🎥 그래픽을 복구하는 중…');
+  }
   if (S.ctxLost) {
-    if (S.ctxLostAt && now - S.ctxLostAt > 7000) rebuildGraphics('context-lost');
+    // 복구 이벤트를 기다리고, 안 오면 직접 재구성
+    if (S.ctxLostAt && now - S.ctxLostAt > 4000) rebuildGraphics('context-lost');
     return;
   }
-  // 2) 흰 화면 감시 (2초 간격)
+  // 2) 흰 화면 · 검은 화면 감시 (2초 간격) — 렌더 직후 같은 프레임에서 읽는다
   if (gfxTick % 2 !== 0) return;
-  if (!frameIsWhite()) { whiteStreak = 0; return; }
-  whiteStreak++;
-  if (whiteStreak === 2) {
-    const fixed = sanitizeScene();
-    if (composer && composer.reset) { try { composer.reset(); } catch (e) {} }
-    renderer.shadowMap.needsUpdate = true;
-    if (window.console) console.warn('[fry-factory] 흰 화면 감지 — 씬 정화', fixed);
-  } else if (whiteStreak >= 4) {
-    if (window.console) console.warn('[fry-factory] 흰 화면 지속 — 그래픽 파이프라인 재구성');
-    whiteStreak = 0;
-    rebuildGraphics('white-screen');
+  const lum = sampleCanvasLum([
+    [0.5, 0.5], [0.35, 0.6], [0.65, 0.4],           // 흰 화면 판정
+    [0.5, 0.55], [0.38, 0.5], [0.62, 0.62], [0.5, 0.86],  // 검은 화면 판정
+  ]);
+  if (lum) _lastLum = lum.map((v) => Math.round(v));
+  const white = lum ? lum.slice(0, 3).every((v) => v >= 250) : false;
+  const black = lum ? Math.max.apply(null, lum.slice(3)) < 9 : false;
+  if (white) {
+    whiteStreak++;
+    if (whiteStreak === 2) {
+      const fixed = sanitizeScene();
+      if (composer && composer.reset) { try { composer.reset(); } catch (e) {} }
+      renderer.shadowMap.needsUpdate = true;
+      if (window.console) console.warn('[fry-factory] 흰 화면 감지 — 씬 정화', fixed);
+    } else if (whiteStreak >= 4) {
+      if (window.console) console.warn('[fry-factory] 흰 화면 지속 — 그래픽 파이프라인 재구성');
+      whiteStreak = 0;
+      rebuildGraphics('white-screen');
+    }
+    return;
+  }
+  whiteStreak = 0;
+  // 조명은 살아 있는데 아무것도 안 보이면 파이프라인이 죽은 것이다
+  if (!black || !sceneShouldBeVisible()) { darkStreak = 0; return; }
+  darkStreak++;
+  const urgent = now < _resumeDarkAt;                 // 복귀 직후면 바로 판단
+  if (darkStreak >= (urgent ? 1 : 3)) {
+    if (window.console) console.warn('[fry-factory] 검은 화면 지속 — 그래픽 파이프라인 재구성');
+    darkStreak = 0;
+    rebuildGraphics('black-screen');
   }
 }
 
@@ -474,15 +599,21 @@ function rebuildGraphics(reason) {
     const robots = S.robots.length;
     const brokenIds = S.robots.filter((r) => r.broken).map((r) => r.id);
     const agentPos = S.agents.map((a) => ({ id: a.id, x: a.pos.x, z: a.pos.z, face: a.face }));
+    // 컨텍스트를 잃었거나 복구된 직후면 이전 GPU 자원은 이미 사라졌다.
+    // 이미 죽은 컨텍스트의 객체를 삭제하려 들면 GL 경고만 쏟아진다.
+    const lostCtx = S.ctxLost || reason === 'context-restored' || reason === 'context-lost'
+      || reason === 'resume-lost';
 
     // 동적 오브젝트 정리
-    S.customers.forEach((c) => { disposeTree(c.mesh); disposeTree(c.shadow); });
+    if (!lostCtx) {
+      S.customers.forEach((c) => { disposeTree(c.mesh); disposeTree(c.shadow); });
+      S.beltItems.forEach((b) => disposeTree(b.mesh));
+      S.anomalies.forEach((an) => removeAnomaly(an));
+      S.shots.forEach((s) => disposeTree(s.mesh));
+    }
     S.customers.length = 0;
-    S.beltItems.forEach((b) => disposeTree(b.mesh));
     S.beltItems.length = 0;
-    S.anomalies.forEach((an) => removeAnomaly(an));
     S.anomalies.length = 0;
-    S.shots.forEach((s) => disposeTree(s.mesh));
     S.shots.length = 0;
     parts.length = 0;
     coinFx.length = 0;
@@ -492,12 +623,11 @@ function rebuildGraphics(reason) {
     S.blackout = false;
 
     // 이전 월드 GPU 자원 회수 (공용 자산은 표시가 있어 건너뛴다)
-    //  컨텍스트를 잃은 상태면 GPU 자원은 이미 사라졌으므로 건너뛴다
-    if (scene && !S.ctxLost) { disposeTree(scene); }
+    if (scene && !lostCtx) { disposeTree(scene); }
     if (scene) scene.clear();
-    if (composer) { try { composer.dispose && composer.dispose(); } catch (e) {} }
+    if (composer && !lostCtx) { try { composer.dispose && composer.dispose(); } catch (e) {} }
     composer = null; bloomPass = null;
-    if (renderer) { try { renderer.dispose(); } catch (e) {} }
+    if (renderer && !lostCtx) { try { renderer.dispose(); } catch (e) {} }
     renderer = null;
 
     // 새 캔버스 (죽은 컨텍스트는 재사용할 수 없다)
@@ -535,10 +665,17 @@ function rebuildGraphics(reason) {
     restoreUpgradeVisuals();
     S.ctxLost = false;
     S.ctxLostAt = 0;
+    whiteStreak = 0;
+    darkStreak = 0;
+    _resumeDarkAt = 0;
+    try { clock.getDelta(); } catch (e) {}      // 재구성 중 흐른 시간을 시뮬레이션에 넣지 않는다
+    if (W) W.setNight(S.nightMix, S.blackout ? 1 : 0, dawnFactor());
     labelCache.peel = labelCache.fry = labelCache.ready = null;
     renderer.shadowMap.needsUpdate = true;
     renderFrame();
     S.rebuilding = false;
+    _lastRebuildEnd = performance.now();
+    clearGfxNotice();
     toast('🎥 화면을 복구했습니다', 2600);
     return true;
   } catch (err) {
@@ -852,10 +989,24 @@ function banner(main, sub, ms = 2400) {
   $('bannerMain').textContent = main;
   $('bannerSub').textContent = sub || '';
   el.classList.remove('hidden', 'show');
+  placeBanner(el);
   void el.offsetWidth;
   el.classList.add('show');
   clearTimeout(bannerTimer);
   bannerTimer = setTimeout(() => el.classList.add('hidden'), ms);
+}
+
+// 밤 상태 패널(#nightbar)과 배너가 모바일 세로 화면에서 겹치지 않게 패널 아래로 내린다
+function placeBanner(el) {
+  if (!el) return;
+  const h = window.innerHeight || 720;
+  let top = h * 0.27;
+  const nb = $('nightbar');
+  if (nb && !nb.classList.contains('hidden')) {
+    const r = nb.getBoundingClientRect();
+    if (r.height > 0) top = Math.max(top, r.bottom + Math.min(100, h * 0.12));
+  }
+  el.style.top = Math.round(Math.min(top, h * 0.58)) + 'px';
 }
 
 /* ── 파티클 ───────────────────────────────────────────────────────────── */
@@ -2337,10 +2488,9 @@ function updateVisuals(rdt, simDt) {
   S.nightMix += (targetMix - S.nightMix) * Math.min(1, rdt * 1.4);
   if (Math.abs(targetMix - S.nightMix) < 0.002) S.nightMix = targetMix;
   // 새벽 계수: 밤 후반(04:30~06:00)과 아침 초반(06:00~07:00)
-  let dawn = 0;
-  if (S.phase === 'night') dawn = clamp((S.clock - 27.7) / 2.3, 0, 1);
-  else dawn = clamp(1 - (S.clock - 6) / 1.1, 0, 1) * 0.9;
-  W.setNight(S.nightMix, S.blackout ? 1 : 0, dawn);
+  // 정전 이벤트가 사라졌는데 조명이 꺼진 채 굳으면 화면이 검게 남는다
+  if (S.blackout && !S.anomalies.some((a) => a.type === 'blackout' && !a.done)) S.blackout = false;
+  W.setNight(S.nightMix, S.blackout ? 1 : 0, dawnFactor());
   W.alert(S.phase === 'night');
   W.tick(now / 1000, S.nightMix);
   W.setClock(S.clock);
@@ -2536,7 +2686,11 @@ function bindUI() {
   $('btnEndless').addEventListener('click', closeClear);
   window.addEventListener('resize', () => {
     clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(applyViewport, 120);
+    resizeTimer = setTimeout(() => {
+      applyViewport();
+      const bn = $('banner');
+      if (bn && !bn.classList.contains('hidden')) placeBanner(bn);
+    }, 120);
   });
   window.addEventListener('keydown', (e) => {
     if (e.code === 'Space') { e.preventDefault(); S.paused = !S.paused; }
@@ -2572,6 +2726,7 @@ function init() {
 
   buildUps();
   bindUI();
+  bindLifecycleEvents();
   refreshUps();
   updateHUD(true);
   renderFrame();
@@ -2679,6 +2834,73 @@ window.__FFA = {
       shutterY: +W.refs.shutter.position.y.toFixed(2), vats: W.refs.vats.length,
     }; },
     render() { renderFrame(); },
+    // 그래픽 파이프라인 진단 (검증용)
+    gfx() {
+      return {
+        ctxLost: !!S.ctxLost, rebuilding: !!S.rebuilding,
+        lostFor: S.ctxLostAt ? Math.round(performance.now() - S.ctxLostAt) : 0,
+        whiteStreak, darkStreak, probeBroken: !!_pxProbeBroken, lastLum: _lastLum,
+        lastRebuildAgo: _lastRebuildEnd ? Math.round(performance.now() - _lastRebuildEnd) : -1,
+        canvas: !!$('gl'), glLost: (renderer && renderer.getContext) ? renderer.getContext().isContextLost() : null,
+        textures: renderer ? renderer.info.memory.textures : -1,
+        geometries: renderer ? renderer.info.memory.geometries : -1,
+        programs: renderer && renderer.info.programs ? renderer.info.programs.length : -1,
+      };
+    },
+    lights() {
+      if (!W || !W.refs) return null;
+      const R = W.refs;
+      return {
+        nightMix: +S.nightMix.toFixed(3), blackout: S.blackout, phase: S.phase, clock: +S.clock.toFixed(2),
+        sun: +R.sun.intensity.toFixed(3), hemi: +R.hemi.intensity.toFixed(3), amb: +R.amb.intensity.toFixed(3),
+        moon: +R.moonLight.intensity.toFixed(3), fill: +R.fill.intensity.toFixed(3),
+        shop: +R.shopLights[0].intensity.toFixed(3), exposure: renderer.toneMappingExposure,
+      };
+    },
+    resume() { onPageResume('debug'); return true; },
+    rebuildGfx(reason) { return rebuildGraphics(reason || 'debug'); },
+    pixels() {
+      const a = sampleCanvasLum([[0.5, 0.5], [0.35, 0.6], [0.65, 0.4]]);
+      const b = sampleCanvasLum([[0.5, 0.55], [0.38, 0.5], [0.62, 0.62], [0.5, 0.86]]);
+      return { white: a, black: b };
+    },
+    // 캔버스 전체 픽셀 통계 (HUD 제외한 3D만 · 렌더 직후 같은 태스크에서 읽는다)
+    snapshot() {
+      if (!renderer || S.ctxLost) return null;
+      renderFrame();
+      const gl = renderer.getContext();
+      if (!gl || gl.isContextLost() || !initPixelProbe(gl)) return null;
+      const w = gl.drawingBufferWidth, h = gl.drawingBufferHeight;
+      if (!w || !h) return null;
+      const n = w * h;
+      let err = 0;
+      try { gl.getError(); } catch (e) {}
+      if (_pxType === gl.FLOAT) {
+        const buf = new Float32Array(n * 4);
+        gl.readPixels(0, 0, w, h, _pxFmt, _pxType, buf);
+        if (gl.getError() !== gl.NO_ERROR) return null;
+        let sum = 0, dark = 0, white = 0;
+        for (let i = 0; i < n; i++) {
+          const j = i * 4;
+          const l = (buf[j] * 0.2126 + buf[j + 1] * 0.7152 + buf[j + 2] * 0.0722) * 255;
+          sum += l; if (l < 10) dark++; if (l > 250) white++;
+        }
+        return { w, h, mean: +(sum / n).toFixed(2), dark: +(dark / n).toFixed(4), white: +(white / n).toFixed(4) };
+      }
+      const buf = new Uint8Array(n * 4);
+      gl.readPixels(0, 0, w, h, _pxFmt, _pxType, buf);
+      if (gl.getError() !== gl.NO_ERROR) return null;
+      let sum = 0, dark = 0, white = 0;
+      const hist = new Uint32Array(256);
+      for (let i = 0; i < n; i++) {
+        const j = i * 4;
+        const l = (buf[j] * 0.2126 + buf[j + 1] * 0.7152 + buf[j + 2] * 0.0722) | 0;
+        hist[l]++; sum += l; if (l < 10) dark++; if (l > 250) white++;
+      }
+      let acc = 0, median = 0;
+      for (let v = 0; v < 256; v++) { acc += hist[v]; if (acc >= n / 2) { median = v; break; } }
+      return { w, h, mean: +(sum / n).toFixed(2), median, dark: +(dark / n).toFixed(4), white: +(white / n).toFixed(4) };
+    },
     refresh() { updateHUD(true); refreshUps(); },
     damage(n) { damageShutter(n, { x: 9, z: L.window.z }); },
     setSpeed(n) { S.speed = n; },
