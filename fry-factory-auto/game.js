@@ -639,6 +639,7 @@ function rebuildGraphics(reason) {
     else $('wrap').appendChild(cv);
 
     initThree();                    // renderer · scene · camera · controls · W · composer
+    _pxFmt = 0; _pxType = 0; _pxBuf = null; _pxProbeBroken = false;   // 새 컨텍스트의 readPixels 포맷을 다시 묻는다
     bindCanvasLifecycle(cv);
     if (camP && camT) {
       camera.position.copy(camP);
